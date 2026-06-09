@@ -5,6 +5,12 @@
 Interactive console util to disable 76 non-essential macOS launchd services. Reclaims ~1.5 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
 
 ```bash
+npx -y @oleksandr_krupko/mac-os-debloat
+```
+
+Or via curl:
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/debloat | python3
 ```
 
