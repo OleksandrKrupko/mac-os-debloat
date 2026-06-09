@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.debloat.watcher</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/usr/local/bin/debloat-watcher.py</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DEBLOAT_TICK</key>
+        <string>1.0</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>StandardOutPath</key>
+    <string>/var/log/debloat-watcher.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/debloat-watcher.err</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

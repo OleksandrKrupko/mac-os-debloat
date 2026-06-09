@@ -35,7 +35,8 @@ EMBEDDED_LABELS = """\
 # === Siri / voice assistant ===
 com.apple.assistantd                          # Siri core
 com.apple.Siri.agent                          # Siri agent
-com.apple.SiriTTSService.TrainingAgent        # Siri voice training
+com.apple.SiriTTSTrainingAgent                # Siri voice training
+com.apple.sirittsd                            # Siri TTS daemon
 com.apple.siriinferenced                      # on-device Siri inference
 com.apple.siriknowledged                      # Siri knowledge graph
 com.apple.assistant_cdmd                      # Siri continuous dialog manager
@@ -111,6 +112,7 @@ com.apple.identityservicesd                   # Apple ID identity (iMessage/Face
 com.apple.callservicesd                       # phone call relay from iPhone
 com.apple.imautomatichistorydeletionagent     # iMessage history cleanup
 com.apple.imtransferagent                     # iMessage attachments
+com.apple.nearbyd                             # Continuity Nearby (AirDrop/Handoff discovery)
 
 # === HomeKit ===
 com.apple.homed                               # HomeKit daemon
@@ -126,7 +128,6 @@ com.apple.speech.speechsynthesisd             # text-to-speech
 com.apple.speech.speechdatainstallerd         # voice data installer
 
 # === Wallpaper / thumbnails ===
-com.apple.WallpaperAgent                      # dynamic wallpaper engine
 com.apple.quicklook.ThumbnailsAgent           # QuickLook thumbnails in Finder
 
 # === App Store + update nags (keeps softwareupdated for security) ===
@@ -136,7 +137,6 @@ com.apple.amsengagementd                      # Apple Media Services engagement
 
 # === Misc dead weight ===
 com.apple.studentd                            # Schoolwork app
-com.apple.heard                               # Live Listen (hearing aids)
 com.apple.replayd                             # ReplayKit (game screen recording)
 com.apple.linkd                               # Universal Links (iOS-style deep links)
 com.apple.AppSSOAgent                         # Apple SSO extensions
@@ -144,6 +144,7 @@ com.apple.AppSSOAgent                         # Apple SSO extensions
 # === iCloud (no iCloud use) ===
 com.apple.fileproviderd                       # File Provider API (iCloud Drive, Dropbox, GDrive Finder ext)
 com.apple.cloudd                              # iCloud sync core
+com.apple.cloudphotod                         # iCloud Photos sync
 
 # === Location/prediction extras (Find My still intact) ===
 com.apple.routined                            # significant locations / location-aware reminders
@@ -157,7 +158,6 @@ com.apple.talagentd                           # Time Machine listener agent
 
 # === Focus / DND / Screen Time ===
 com.apple.donotdisturbd                       # Focus modes / Do Not Disturb
-com.apple.ScreenTimeAgent                     # Screen Time usage tracking
 
 # === Apple Media Services / iPhone telephony / contacts ===
 com.apple.amsaccountsd                        # Apple Media Services account state
@@ -167,13 +167,253 @@ com.apple.postersyncd                         # Contacts profile picture sync
 
 # === More AI/ML stragglers ===
 com.apple.mlhostd                             # ML host daemon
-com.apple.modelmanagerd                       # Apple Intelligence model manager
 
 # === Cosmetic / app daemons ===
 com.apple.PowerChime                          # laptop charging chime sound
 com.apple.bookstoreagent                      # Apple Books
 com.apple.tvagent                             # Apple TV app
 com.apple.podcasts                            # Podcasts daemon
+
+# === Safari (no Safari use) ===
+com.apple.Safari.SafeBrowsing.Service         # Safari Safe Browsing list updates
+com.apple.SafariPlatformSupport.Helper        # Safari platform helper
+com.apple.SafariBookmarksSyncAgent            # Safari bookmarks iCloud sync
+com.apple.SafariLaunchAgent                   # Safari startup agent
+com.apple.SafariCloudHistoryPushAgent         # Safari history iCloud sync
+
+# === More AI / Apple Intelligence ===
+com.apple.ContextService                      # Apple Intelligence ContextKit XPC
+com.apple.siriactionsd                        # Siri Shortcuts/Voice Shortcuts agent
+com.apple.ContextStoreAgent                   # CoreDuet ContextStoreAgent
+com.apple.corespeechd                         # Core Speech backbone (Siri/dictation)
+com.apple.corespeechd.system                  # Core Speech system variant
+com.apple.speech.synthesisserver              # speech synthesis server
+com.apple.spotlightknowledged                 # CoreSpotlight semantic search
+com.apple.spotlightknowledged.importer        # CoreSpotlight importer
+com.apple.spotlightknowledged.updater         # CoreSpotlight updater
+com.apple.callintelligenced                   # AI call analysis (call summaries)
+com.apple.intelligenceflowd                   # AI flow daemon
+com.apple.intelligencetasksd                  # AI tasks daemon
+
+# === Apple Music / iTunes / Media streaming ===
+com.apple.itunescloudd                        # Apple Music / iTunes Match cloud
+com.apple.musicd                              # Apple Music local daemon
+com.apple.amp.mediasharingd                   # Apple Music sharing
+com.apple.mediastream.mstreamd                # iCloud media stream
+com.apple.mediacontinuityd                    # media Continuity (no iPhone)
+com.apple.mediaremoted                        # media keys / now-playing
+com.apple.mediaremoteagent                    # media remote agent
+
+# === Apple ID / Apple Pay / SSO ===
+com.apple.appleaccountd                       # Apple ID account daemon
+com.apple.passd                               # Wallet / Apple Pay
+com.apple.AppSSODaemon                        # Apple SSO Daemon
+
+# === App Store full kill (re-enable when needed) ===
+com.apple.appstored                           # App Store daemon
+com.apple.appstorecomponentsd                 # App Store components
+com.apple.commerce                            # App Store commerce / purchases
+
+# === iCloud user-facing notifications ===
+com.apple.iCloudNotificationAgent             # iCloud notification UI
+com.apple.iCloudUserNotifications             # iCloud user notifications
+com.apple.icloudmailagent                     # iCloud Mail (no Apple Mail)
+com.apple.FollowUpUI                          # Apple ID nag UI
+
+# === Apple Books (no Books use) ===
+com.apple.bookassetd                          # Apple Books asset downloads
+com.apple.bookdatastored                      # Apple Books data store
+
+# === Telemetry extras ===
+com.apple.geoanalyticsd                       # Geo telemetry
+com.apple.SubmitDiagInfo                      # diagnostic submitter to Apple
+com.apple.BiomeAgent                          # biome event hub agent
+com.apple.biomed                              # biome event hub daemon
+
+# === Contacts/Photos extras ===
+com.apple.contacts.donation-agent             # Contacts → Siri Suggestions feed
+com.apple.photolibraryd                       # Photos library daemon
+
+# === Filesystem / cosmetic ===
+com.apple.filesystems.fskitd                  # File System Kit core (3rd-party FS plugins)
+com.apple.fskit.fskit_agent                   # FSKit agent
+com.apple.fskit.fskit_helper                  # FSKit helper
+com.apple.chronod                             # widget host (widgets gone, demand-loaded by NC)
+
+# === Contacts / AddressBook (no Mac Contacts use) ===
+com.apple.AddressBook.AssistantService        # Contacts assistant
+com.apple.AddressBook.SourceSync              # Contacts source sync
+com.apple.AddressBook.abd                     # Contacts daemon
+
+# === Maps (Google Maps user) ===
+com.apple.Maps.mapssyncd                      # Apple Maps sync
+com.apple.Maps.pushdaemon                     # Apple Maps push
+com.apple.maps.destinationd                   # Apple Maps destinations
+com.apple.intelligentroutingd                 # intelligent routing (Maps)
+
+# === Beta program enrollment (not on macOS beta) ===
+com.apple.appleseed.fbahelperd                # AppleSeed feedback assistant helper
+com.apple.appleseed.seedusaged                # AppleSeed usage telemetry
+com.apple.appleseed.seedusaged.postinstall    # AppleSeed postinstall
+com.apple.betaenrollmentagent                 # beta enrollment agent
+com.apple.betaenrollmentd                     # beta enrollment daemon
+
+# === Game controllers (no gamepad attached) ===
+com.apple.GameController.gamecontrolleragentd # game controller agent
+com.apple.GameController.gamecontrollerd      # game controller daemon
+com.apple.GamePolicyAgent                     # game policy agent
+com.apple.gamepolicyd                         # game policy daemon
+com.apple.gamesaved                           # game saves
+
+# === Sidecar / iPad second display (no iPad) ===
+com.apple.sidecar-hid-relay                   # Sidecar input relay
+com.apple.sidecar-relay                       # Sidecar relay
+
+# === Continuity Capture (no iPhone webcam) ===
+com.apple.cmio.ContinuityCaptureAgent         # iPhone as webcam agent
+com.apple.companiond                          # Apple Watch / iPhone companion
+com.apple.boswatcher                          # BoardOS accessory watcher
+
+# === Avatar / Memoji / Stickers (no iMessage) ===
+com.apple.avatarsd                            # Memoji / avatars
+com.apple.stickersd                           # iMessage stickers
+
+# === Safari extras (no Safari + no iCloud Keychain) ===
+com.apple.Safari.History                      # Safari history
+com.apple.Safari.PasswordBreachAgent          # password leak checker (needs iCloud Keychain)
+com.apple.SafariHistoryServiceAgent           # Safari history XPC
+com.apple.SafariNotificationAgent             # Safari web notifications
+
+# === Family / Parental controls (no family setup) ===
+com.apple.familycontrols                      # family controls daemon
+com.apple.familycontrols.useragent            # family controls user agent
+com.apple.FamilyControlsAgent                 # family controls agent
+com.apple.familynotificationd                 # family notifications
+com.apple.parentalcontrols.check              # parental controls checker
+
+# === Proactive / Siri-adjacent (no Siri) ===
+com.apple.proactived                          # proactive engine
+com.apple.proactiveeventtrackerd              # proactive event tracker
+com.apple.knowledgeconstructiond              # knowledge graph construction
+com.apple.reversetemplated                    # reverse template AI
+
+# === AirPlay sender UI ===
+com.apple.AirPlayUIAgent                      # AirPlay sender UI (sending to Apple TV)
+
+# === Sports / News extras ===
+com.apple.sportsd                             # Apple Sports data
+
+# === Apple FairPlay DRM (no DRM-protected Apple content) ===
+com.apple.fairplayd                           # FairPlay DRM
+com.apple.fairplaydeviceidentityd             # FairPlay device identity
+
+# === Diagnostics extras (all telemetry to Apple) ===
+com.apple.diagnosticd                         # diagnostics
+com.apple.diagnosticextensionsd               # diagnostic extensions
+com.apple.diagnostics_agent                   # diagnostics agent
+com.apple.diagnosticservicesd                 # diagnostic services
+com.apple.diagnosticspushd                    # diagnostic push
+com.apple.metrickitd                          # MetricKit (app metrics to Apple)
+com.apple.osanalytics.osanalyticshelper       # OS analytics helper
+com.apple.spindump_agent                      # spindump agent (process hangs)
+com.apple.metadata.mds.spindump               # Spotlight spindump diagnostic
+com.apple.audioanalyticsd                     # audio analytics
+com.apple.inputanalyticsd                     # input analytics (typing/touch)
+com.apple.ecosystemanalyticsd                 # ecosystem analytics
+com.apple.perfpowermetricd                    # perf/power metrics
+com.apple.analyticsagent                      # analytics agent
+com.apple.CrashReporterSupportHelper          # crash reporter support
+com.apple.DiagnosticsReporter                 # diagnostics reporter
+com.apple.InstallerDiagnostics.installerdiagd # installer diagnostics
+com.apple.InstallerDiagnostics.installerdiagwatcher  # installer diag watcher
+com.apple.loginwindow.LWWeeklyMessageTracer   # weekly login telemetry
+com.apple.symptomsd-diag                      # symptoms diag (keep core symptomsd)
+com.apple.symptomsd.distributed-agent         # symptoms distributed agent
+
+# === Software update extras (keep softwareupdated + swcd) ===
+com.apple.softwareupdate_firstrun_tasks       # one-shot first-boot SU tasks
+
+# === Misc Apple legacy / unused ===
+com.apple.AOSPushRelay                        # legacy iCloud push relay
+com.apple.nfcd                                # NFC daemon (no Apple Pay)
+com.apple.facetimemessagestored               # FaceTime message store
+com.apple.calendar.CalendarAgentBookmarkMigrationService  # one-shot Cal bookmark migration
+
+# === Apple ID auth (kill — re-enable when needed for App Store) ===
+com.apple.akd                                 # AuthKit (Apple ID) — re-enable when logging into App Store
+
+# === Apple Translate / Notes / VoiceOver / accessibility extras ===
+com.apple.translationd                        # Apple Translate API (Translate app, Safari translate)
+com.apple.notes.exchangenotesd                # Apple Notes Exchange sync
+com.apple.VoiceOver                           # screen reader (no accessibility use)
+com.apple.accessibility.LiveTranscriptionAgent  # live transcription/captions
+com.apple.DictationIM                         # dictation input method
+com.apple.voicebankingd                       # custom voice creation (Live Speech)
+com.apple.voicememod                          # Voice Memos app
+
+# === iCloud settings / language assets ===
+com.apple.CloudSettingsSyncAgent              # iCloud settings sync
+com.apple.languageassetd                      # Apple language model assets (Siri/dictation/translate)
+com.apple.erasecontentsettingshelperd         # Erase All Content (only used for factory reset)
+
+# === Apple TV watchlist / social / WiFi telemetry ===
+com.apple.watchlistd                          # Apple TV+ watchlist
+com.apple.sociallayerd                        # Game Center social layer
+com.apple.wifianalyticsd                      # WiFi telemetry
+
+# === T2 / bridgeOS (Apple Silicon doesn't use bridgeOS) ===
+com.apple.bridgeOSUpdateProxy                 # bridgeOS update proxy (T2 Intel only)
+
+# === Print (no printer) ===
+com.apple.printtool.agent                     # print tool agent
+com.apple.printtool.daemon                    # print tool daemon
+com.apple.printuitool.agent                   # print UI tool agent
+
+# === Xcode / iOS dev stack (FE/BE dev, no mobile) ===
+com.apple.dt.previewsd                        # Xcode SwiftUI previews
+com.apple.dt.previewsviewservice              # Xcode preview view service
+com.apple.swiftuitraced                       # SwiftUI tracing
+com.apple.dt.AutomationModeUI                 # Xcode automation UI
+com.apple.dt.automationmode-writer            # Xcode automation writer
+
+# === Apple Music Player (AMP) suite — no Apple Music ===
+com.apple.AMPArtworkAgent                     # album artwork
+com.apple.AMPDeviceDiscoveryAgent             # Apple Music device discovery (not AirPods BT)
+com.apple.AMPDevicesAgent                     # Apple Music devices agent
+com.apple.AMPLibraryAgent                     # Apple Music library
+com.apple.AMPSystemPlayerAgent                # system music player agent
+
+# === Apple TV+ / video subscriptions ===
+com.apple.videosubscriptionsd                 # Apple TV+ subscriptions
+
+# === Touch Bar (M4 has none) ===
+com.apple.NowPlayingTouchUI                   # Touch Bar now-playing UI
+
+# === Continuity Data Protocol (no iPhone) ===
+com.apple.cdpd                                # Continuity Data Protocol
+com.apple.cloudpaird                          # iCloud device pairing
+
+# === Safari Web Inspector / WebKit push (no Safari) ===
+com.apple.webinspectord                       # Safari Web Inspector
+com.apple.webkit.webpushd                     # WebKit push (Safari web notifications)
+
+# === Photos People / face recognition ===
+com.apple.peopled                             # People framework (face detection in Photos)
+
+# === iCloud Drive / Keychain Circle / SyncedDefaults / CloudDocs ===
+com.apple.bird                                # iCloud Drive sync daemon
+com.apple.security.keychain-circle-notification  # iCloud Keychain notification
+com.apple.syncdefaultsd                       # iCloud synced defaults (app prefs)
+
+# === MDM / Managed apps (no MDM enrollment) ===
+com.apple.managedappdistributionagent         # managed app distribution agent
+com.apple.managedappdistributiond             # managed app distribution daemon
+
+# === Migration / setup leftover ===
+com.apple.milod                               # Migration assistant daemon
+
+# === extra Time Machine replicator label ===
+com.apple.replicatord                         # Time Machine replicator (alt label)
 """
 
 _SCRIPT_FILE = globals().get("__file__")
@@ -336,6 +576,87 @@ def prime_sudo() -> bool:
     return result.returncode == 0
 
 
+WATCHER_PLIST = Path("/Library/LaunchDaemons/ai.debloat.watcher.plist")
+WATCHER_BIN = Path("/usr/local/bin/debloat-watcher.py")
+WATCHER_KILLLIST = Path("/etc/debloat-killlist.txt")
+WATCHER_LOG = Path("/var/log/debloat-watcher.log")
+
+
+def watcher_installed() -> bool:
+    return WATCHER_PLIST.exists() and WATCHER_BIN.exists()
+
+
+def write_killlist(sections: list[Section]) -> None:
+    """Write current disabled-by-user labels to /etc/debloat-killlist.txt."""
+    lines = []
+    for sec in sections:
+        for it in sec.items:
+            if not it.selected:
+                lines.append(it.label)
+    content = "# auto-generated by debloat TUI — labels to keep killed\n" + "\n".join(lines) + "\n"
+    subprocess.run(
+        ["sudo", "tee", str(WATCHER_KILLLIST)],
+        input=content, capture_output=True, text=True, check=False,
+    )
+
+
+def install_watcher(script_dir: Path) -> tuple[bool, str]:
+    """Copy watcher.py + plist, bootstrap LaunchDaemon."""
+    src_py = script_dir / "extras" / "watcher.py"
+    src_plist = script_dir / "extras" / "ai.debloat.watcher.plist"
+    if not src_py.exists() or not src_plist.exists():
+        return False, f"missing files in {script_dir}/extras/"
+    cmds = [
+        ["sudo", "cp", str(src_py), str(WATCHER_BIN)],
+        ["sudo", "chmod", "755", str(WATCHER_BIN)],
+        ["sudo", "cp", str(src_plist), str(WATCHER_PLIST)],
+        ["sudo", "chmod", "644", str(WATCHER_PLIST)],
+        ["sudo", "chown", "root:wheel", str(WATCHER_PLIST)],
+        ["sudo", "launchctl", "bootstrap", "system", str(WATCHER_PLIST)],
+    ]
+    for cmd in cmds:
+        r = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if r.returncode != 0 and "bootstrap" in cmd:
+            return False, f"bootstrap failed: {r.stderr.strip()}"
+        elif r.returncode != 0:
+            return False, f"failed {' '.join(cmd)}: {r.stderr.strip()}"
+    return True, "watcher installed and running"
+
+
+def uninstall_watcher() -> tuple[bool, str]:
+    subprocess.run(["sudo", "launchctl", "bootout", f"system/ai.debloat.watcher"],
+                   capture_output=True, check=False)
+    for p in (WATCHER_PLIST, WATCHER_BIN, WATCHER_KILLLIST):
+        subprocess.run(["sudo", "rm", "-f", str(p)], capture_output=True, check=False)
+    return True, "watcher uninstalled"
+
+
+def watcher_status_line() -> str:
+    if watcher_installed():
+        return "watcher: ON (1s tick)"
+    return "watcher: OFF"
+
+
+def spotlight_enabled() -> bool:
+    """Return True if Spotlight indexing is enabled on the root volume."""
+    r = subprocess.run(["mdutil", "-s", "/System/Volumes/Data"],
+                       capture_output=True, text=True, check=False)
+    return "Indexing enabled" in r.stdout
+
+
+def spotlight_status_line() -> str:
+    return f"spotlight: {'ON' if spotlight_enabled() else 'OFF'}"
+
+
+def spotlight_set(enabled: bool) -> tuple[bool, str]:
+    flag = "on" if enabled else "off"
+    r = subprocess.run(["sudo", "mdutil", "-a", "-i", flag],
+                       capture_output=True, text=True, check=False)
+    if r.returncode != 0:
+        return False, f"mdutil failed: {r.stderr.strip()}"
+    return True, f"spotlight indexing {'enabled' if enabled else 'disabled'}"
+
+
 def flat_index(sections: list[Section]) -> list[Item]:
     out: list[Item] = []
     for sec in sections:
@@ -394,13 +715,13 @@ def build_display_rows(sections: list[Section]) -> tuple[list[tuple[str, object]
 def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list[int]) -> None:
     stdscr.erase()
     h, w = stdscr.getmaxyx()
-    title = "mac-os-debloat  —  space=toggle  x=section-toggle  s/S=section-off/on  [/]=jump  a/n=all/none  enter=apply  q=quit"
+    title = "mac-os-debloat  —  space=toggle  x=sec-toggle  s/S=sec-off/on  [/]=jump  a/n=all/none  w=watcher  p=spotlight  enter=apply  q=quit"
     stdscr.addnstr(0, 0, title[:w - 1], w - 1, curses.A_BOLD)
 
     diff_count = sum(
         1 for sec in sections for it in sec.items if it.selected == it.disabled
     )
-    sub = f"pending changes: {diff_count}   (checked = enabled/running, unchecked = disabled)"
+    sub = f"pending: {diff_count}   ({watcher_status_line()})   ({spotlight_status_line()})   (checked = enabled/running)"
     stdscr.addnstr(1, 0, sub[:w - 1], w - 1, curses.A_DIM)
 
     rows, item_to_row = build_display_rows(sections)
@@ -513,11 +834,33 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             refresh_state(sections)
             stdscr.clear()
             status = "state reloaded"
+        elif c == ord("w"):
+            curses.endwin()
+            if not prime_sudo():
+                return "sudo failed"
+            script_dir = Path(_SCRIPT_FILE).parent if _SCRIPT_FILE else Path.cwd()
+            if watcher_installed():
+                ok, msg = uninstall_watcher()
+            else:
+                ok, msg = install_watcher(script_dir)
+                if ok:
+                    write_killlist(sections)
+            stdscr.clear()
+            status = msg
+        elif c == ord("p"):
+            curses.endwin()
+            if not prime_sudo():
+                return "sudo failed"
+            ok, msg = spotlight_set(not spotlight_enabled())
+            stdscr.clear()
+            status = msg
         elif c in (curses.KEY_ENTER, 10, 13):
             curses.endwin()
             if not prime_sudo():
                 return "sudo failed"
             result = apply_changes(sections)
+            if watcher_installed():
+                write_killlist(sections)
             refresh_state(sections)
             stdscr.clear()
             straglen = len(result["stragglers"])
@@ -533,7 +876,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
                     sys.stderr.write(f"  {label}  pids={pids}\n")
 
 
-VERSION = "0.1.3"
+VERSION = "0.2.0"
 
 
 def main() -> int:
