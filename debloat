@@ -247,7 +247,42 @@ def refresh_state(sections: list[Section]) -> None:
             it.selected = not it.disabled
 
 
-def apply_changes(sections: list[Section]) -> tuple[int, int]:
+def find_pids_for_labels(labels: list[str]) -> dict[str, list[int]]:
+    """Return {label: [pids]} for labels with matching running processes.
+    Matches by basename of executable equal to label's last segment,
+    or by label appearing in full command line."""
+    if not labels:
+        return {}
+    r = subprocess.run(["ps", "-axm", "-o", "pid=,comm="],
+                       capture_output=True, text=True, check=False)
+    short_to_label: dict[str, str] = {}
+    for lab in labels:
+        short_to_label[lab.rsplit(".", 1)[-1]] = lab
+    label_set = set(labels)
+    out: dict[str, list[int]] = {}
+    for line in r.stdout.splitlines():
+        parts = line.strip().split(None, 1)
+        if len(parts) < 2:
+            continue
+        pid_str, cmd = parts
+        try:
+            pid = int(pid_str)
+        except ValueError:
+            continue
+        cmd_short = cmd.rsplit("/", 1)[-1]
+        if cmd_short in short_to_label:
+            out.setdefault(short_to_label[cmd_short], []).append(pid)
+            continue
+        for lab in label_set:
+            if lab in cmd:
+                out.setdefault(lab, []).append(pid)
+                break
+    return out
+
+
+def apply_changes(sections: list[Section]) -> dict:
+    import time
+
     to_disable: list[str] = []
     to_enable: list[str] = []
     for sec in sections:
@@ -259,6 +294,7 @@ def apply_changes(sections: list[Section]) -> tuple[int, int]:
             elif not wants_enabled and is_enabled:
                 to_disable.append(it.label)
 
+    # Phase 1: launchctl disable + bootout (or enable)
     for label in to_disable:
         for domain in (f"gui/{UID}", "system"):
             subprocess.run(["sudo", "launchctl", "disable", f"{domain}/{label}"],
@@ -269,7 +305,30 @@ def apply_changes(sections: list[Section]) -> tuple[int, int]:
         for domain in (f"gui/{UID}", "system"):
             subprocess.run(["sudo", "launchctl", "enable", f"{domain}/{label}"],
                            capture_output=True, check=False)
-    return len(to_disable), len(to_enable)
+
+    # Phase 2: nuclear kill -9 for anything still running after bootout
+    killed = 0
+    if to_disable:
+        survivors = find_pids_for_labels(to_disable)
+        for label, pids in survivors.items():
+            for pid in pids:
+                r = subprocess.run(["sudo", "kill", "-9", str(pid)],
+                                   capture_output=True, check=False)
+                if r.returncode == 0:
+                    killed += 1
+
+    # Phase 3: brief settle then verify nothing respawned
+    time.sleep(0.4)
+    stragglers: dict[str, list[int]] = {}
+    if to_disable:
+        stragglers = find_pids_for_labels(to_disable)
+
+    return {
+        "disabled": len(to_disable),
+        "enabled": len(to_enable),
+        "killed": killed,
+        "stragglers": stragglers,
+    }
 
 
 def prime_sudo() -> bool:
@@ -458,13 +517,23 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             curses.endwin()
             if not prime_sudo():
                 return "sudo failed"
-            disabled_n, enabled_n = apply_changes(sections)
+            result = apply_changes(sections)
             refresh_state(sections)
             stdscr.clear()
-            status = f"applied: {disabled_n} disabled, {enabled_n} enabled"
+            straglen = len(result["stragglers"])
+            status = (
+                f'applied: {result["disabled"]} disabled, {result["enabled"]} enabled, '
+                f'{result["killed"]} killed'
+            )
+            if straglen:
+                status += f"  ⚠ {straglen} respawned (see terminal after quit)"
+                # Print stragglers to stdout for visibility after TUI exits
+                sys.stderr.write(f"\n[debloat] {straglen} stragglers (respawned by launchd):\n")
+                for label, pids in result["stragglers"].items():
+                    sys.stderr.write(f"  {label}  pids={pids}\n")
 
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 
 
 def main() -> int:
