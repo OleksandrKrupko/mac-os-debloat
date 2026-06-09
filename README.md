@@ -2,7 +2,7 @@
 
 **Debloat your Mac from the terminal. Zero dependencies. Zero install.**
 
-Interactive TUI to disable 76 non-essential macOS launchd services. Frees ~1.5 GB RAM for local LLM inference. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
+Interactive TUI to disable 76 non-essential macOS launchd services. Reclaims ~1.5 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/debloat -o debloat && chmod +x debloat && ./debloat
@@ -12,6 +12,33 @@ Or via Homebrew:
 
 ```bash
 brew install OleksandrKrupko/debloat/debloat
+```
+
+## Screenshot
+
+```
+mac-os-debloat  —  space=toggle  a=all  n=none  enter=apply  r=reload  q=quit
+pending changes: 4   (checked = enabled/running, unchecked = disabled)
+
+── Siri / voice assistant ──────────────────────────────────────────────────
+ *[ ]  com.apple.assistantd                          Siri core
+ *[ ]  com.apple.Siri.agent                          Siri agent
+  [ ]  com.apple.SiriTTSService.TrainingAgent        Siri voice training
+  [ ]  com.apple.siriinferenced                      on-device Siri inference
+ *[ ]  com.apple.siriknowledged                      Siri knowledge graph
+  [ ]  com.apple.assistant_cdmd                      Siri continuous dialog manager
+  [✓]  com.apple.parsecd                             Siri/Spotlight suggestions backend
+  [✓]  com.apple.parsec-fbf                          Siri Suggestions feedback
+ *[ ]  com.apple.intelligencecontextd                Apple Intelligence context runtime
+  [✓]  com.apple.intelligenceplatformd               Apple Intelligence platform
+
+── Apple Intelligence (Tahoe) ────────────────────────────────────────────── ↓
+  [✓]  com.apple.intelligenced                       Apple Intelligence core
+► [✓]  com.apple.aiml.appleintelligenceserviced      AI/ML service
+  [✓]  com.apple.PrivacyIntelligence                 privacy-preserving AI
+  [✓]  com.apple.mlruntime                           ML runtime
+  [✓]  com.apple.generativeexperiencesd              Writing Tools / generative AI
+  [✓]  com.apple.contextstored                       context store (>30GB memory leak)
 ```
 
 <details>
@@ -105,9 +132,11 @@ These will break the system. Not in default list, but if you add manually:
 <details>
 <summary><b>Why</b></summary>
 
-macOS Tahoe (26.x) baselines at ~4-5 GB RAM used by Apple daemons on a 16 GB Mac. Local LLM inference (MLX, Ollama, llama.cpp) competes for the same unified memory pool. Killing services you don't use reclaims ~1.5 GB headroom for model weights + KV cache.
+macOS Tahoe (26.x) baselines at ~4-5 GB RAM and a steady CPU drip from ~50 Apple daemons you mostly don't use — Siri, Apple Intelligence, telemetry, ads, predictions, AirPlay, Photos analysis, etc. On a 16 GB Mac that's a third of your memory gone before any of your own apps start.
 
-Tested on M4 MacBook Pro 16 GB · macOS 26.3.1 · MLX inference.
+This tool kills the ones you don't need, persistently, with a single TUI and no install. ~1.5 GB RAM and a few % CPU back for whatever you're actually running — compilers, browsers, VMs, model inference, video editing, games, whatever.
+
+Tested on M4 MacBook Pro 16 GB · macOS 26.3.1.
 
 </details>
 
@@ -128,4 +157,4 @@ Tested on M4 MacBook Pro 16 GB · macOS 26.3.1 · MLX inference.
 
 MIT · macOS Tahoe 26.x · Apple Silicon · Python 3.10+ (ships with Xcode CLT)
 
-**Keywords:** macOS debloat, macOS Tahoe debloat, Apple Silicon debloat, disable Apple Intelligence, disable Siri permanently, launchctl disable, free RAM macOS, local LLM Mac, MLX RAM, mac performance mode, macOS privacy, kill Apple telemetry, macOS service manager, launchd TUI.
+**Keywords:** macOS debloat, macOS Tahoe debloat, Apple Silicon debloat, disable Apple Intelligence, disable Siri permanently, launchctl disable, free RAM macOS, mac performance mode, macOS privacy, kill Apple telemetry, macOS service manager, launchd TUI, contextstored memory leak, Tahoe RAM usage, Apple Intelligence disable launchctl.
