@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive TUI to toggle macOS launchd services on/off.
+"""Interactive console util to toggle macOS launchd services on/off.
 
 Reads labels.txt, shows current disabled state, lets you flip checkboxes,
 applies diff with sudo on Enter. Persistent across reboot.
