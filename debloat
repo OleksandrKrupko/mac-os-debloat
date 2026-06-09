@@ -148,7 +148,8 @@ com.apple.homeenergyd                         # Home Energy widget
 com.apple.AppPredictionIntentsHelperService   # app prediction (which app you'll open next)
 """
 
-LABELS_FILE = Path(__file__).parent / "labels.txt" if __file__ else None
+_SCRIPT_FILE = globals().get("__file__")
+LABELS_FILE = Path(_SCRIPT_FILE).parent / "labels.txt" if _SCRIPT_FILE else None
 
 
 @dataclass
@@ -381,7 +382,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             status = f"applied: {disabled_n} disabled, {enabled_n} enabled"
 
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 
 def main() -> int:
