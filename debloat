@@ -1,0 +1,417 @@
+#!/usr/bin/env python3
+"""Interactive TUI to toggle macOS launchd services on/off.
+
+Reads labels.txt, shows current disabled state, lets you flip checkboxes,
+applies diff with sudo on Enter. Persistent across reboot.
+
+Keys:
+  ↑/↓ or j/k   navigate
+  space        toggle
+  a            check all
+  n            uncheck all
+  enter        apply changes (prompts sudo)
+  r            reload state from system
+  q            quit
+"""
+from __future__ import annotations
+
+import curses
+import os
+import re
+import subprocess
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+
+UID = os.getuid()
+
+EMBEDDED_LABELS = """\
+# Format: label  # comment (what breaks if disabled)
+# Lines starting with `# ===` are section headers.
+
+# === Siri / voice assistant ===
+com.apple.assistantd                          # Siri core
+com.apple.Siri.agent                          # Siri agent
+com.apple.SiriTTSService.TrainingAgent        # Siri voice training
+com.apple.siriinferenced                      # on-device Siri inference
+com.apple.siriknowledged                      # Siri knowledge graph
+com.apple.assistant_cdmd                      # Siri continuous dialog manager
+com.apple.parsecd                             # Siri/Spotlight suggestions backend
+com.apple.parsec-fbf                          # Siri Suggestions feedback
+com.apple.intelligencecontextd                # Apple Intelligence context runtime
+com.apple.intelligenceplatformd               # Apple Intelligence platform
+com.apple.knowledge-agent                     # knowledge graph extraction
+
+# === Apple Intelligence (Tahoe) ===
+com.apple.intelligenced                       # Apple Intelligence core
+com.apple.aiml.appleintelligenceserviced      # AI/ML service
+com.apple.PrivacyIntelligence                 # privacy-preserving AI
+com.apple.mlruntime                           # ML runtime
+com.apple.generativeexperiencesd              # Writing Tools / generative AI
+com.apple.visualintelligenced                 # visual understanding AI
+com.apple.personalcontextd                    # personal context graph
+com.apple.spatialBrain                        # spatial scene understanding
+com.apple.triald                              # Siri experiments (known CPU hog)
+com.apple.contextstored                       # context store (KNOWN >30GB MEMORY LEAK in Tahoe)
+
+# === Telemetry / analytics ===
+com.apple.analyticsd                          # Apple diagnostics submission
+com.apple.tipsd                               # Tips app notifications
+
+# === AirDrop / Continuity (no iPhone) ===
+com.apple.sharingd                            # AirDrop + Handoff + Universal Clipboard + Continuity Camera
+com.apple.rapportd                            # device proximity / Continuity discovery
+
+# === Diagnostics / crash reports ===
+com.apple.ReportCrash                         # auto crash report generator
+com.apple.ReportPanic                         # kernel panic reports
+com.apple.DiagnosticReportCleanup             # cleans old reports
+com.apple.spindump                            # hang detection / spin reports
+
+# === Apple ads ===
+com.apple.ap.adprivacyd                       # ad privacy
+com.apple.ap.adservicesd                      # App Store ad attribution
+com.apple.ap.promotedcontentd                 # promoted apps
+
+# === Proactive / predictive ===
+com.apple.coreduetd                           # activity tracker for proactive features
+com.apple.duetexpertd                         # prediction engine
+com.apple.suggestd                            # Spotlight smart suggestions backend
+com.apple.biomesyncd                          # biome event sync
+
+# === Game Center / AirPlay receiver ===
+com.apple.gamed                               # Game Center
+com.apple.GameController                      # game controller support
+com.apple.AirPlayReceiver                     # Mac as AirPlay target (receive from other devices)
+com.apple.AirPlayXPCHelper                    # AirPlay helper
+
+# === Photos analysis ===
+com.apple.photoanalysisd                      # face/scene/object scan in Photos
+com.apple.mediaanalysisd                      # media library indexing
+
+# === News / Stocks / Weather ===
+com.apple.WeatherKit.service                  # weather data daemon
+com.apple.stocksd                             # Stocks app daemon
+com.apple.newsd                               # News app daemon
+
+# === Apple ID nags / Family ===
+com.apple.familycircled                       # Family Sharing
+com.apple.followupd                           # Apple ID setup nags
+
+# === Misc ===
+com.apple.shortcuts.useractivity              # Shortcuts event log
+com.apple.helpd                               # Help viewer indexer
+
+# === iMessage / FaceTime / phone relay (no iPhone) ===
+com.apple.imagent                             # iMessage agent
+com.apple.identityservicesd                   # Apple ID identity (iMessage/FaceTime)
+com.apple.callservicesd                       # phone call relay from iPhone
+com.apple.imautomatichistorydeletionagent     # iMessage history cleanup
+com.apple.imtransferagent                     # iMessage attachments
+
+# === HomeKit ===
+com.apple.homed                               # HomeKit daemon
+
+# === Apple Mail/Calendar/Contacts/Reminders (use Gmail/web instead) ===
+com.apple.contactsd                           # Contacts sync
+com.apple.calaccessd                          # Calendar backend
+com.apple.remindd                             # Reminders
+com.apple.dataaccessd                         # Exchange/CardDAV/CalDAV sync
+
+# === Speech / dictation ===
+com.apple.speech.speechsynthesisd             # text-to-speech
+com.apple.speech.speechdatainstallerd         # voice data installer
+
+# === Wallpaper / thumbnails ===
+com.apple.WallpaperAgent                      # dynamic wallpaper engine
+com.apple.quicklook.ThumbnailsAgent           # QuickLook thumbnails in Finder
+
+# === App Store + update nags (keeps softwareupdated for security) ===
+com.apple.appstoreagent                       # App Store agent
+com.apple.SoftwareUpdateNotificationManager   # update nag popups
+com.apple.amsengagementd                      # Apple Media Services engagement
+
+# === Misc dead weight ===
+com.apple.studentd                            # Schoolwork app
+com.apple.heard                               # Live Listen (hearing aids)
+com.apple.replayd                             # ReplayKit (game screen recording)
+com.apple.linkd                               # Universal Links (iOS-style deep links)
+com.apple.AppSSOAgent                         # Apple SSO extensions
+
+# === iCloud (no iCloud use) ===
+com.apple.fileproviderd                       # File Provider API (iCloud Drive, Dropbox, GDrive Finder ext)
+com.apple.cloudd                              # iCloud sync core
+
+# === Location/prediction extras (Find My still intact) ===
+com.apple.routined                            # significant locations / location-aware reminders
+com.apple.homeenergyd                         # Home Energy widget
+com.apple.AppPredictionIntentsHelperService   # app prediction (which app you'll open next)
+"""
+
+LABELS_FILE = Path(__file__).parent / "labels.txt" if __file__ else None
+
+
+@dataclass
+class Item:
+    label: str
+    comment: str
+    section: str
+    disabled: bool = False
+    selected: bool = False
+
+
+@dataclass
+class Section:
+    title: str
+    items: list[Item] = field(default_factory=list)
+
+
+def parse_labels(source: Path | str) -> list[Section]:
+    text = source.read_text() if isinstance(source, Path) else source
+    sections: list[Section] = []
+    current = Section(title="(uncategorized)")
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        m = re.match(r"^#\s*===\s*(.+?)\s*===\s*$", line)
+        if m:
+            if current.items:
+                sections.append(current)
+            current = Section(title=m.group(1))
+            continue
+        if line.lstrip().startswith("#"):
+            continue
+        if "#" in line:
+            label_part, comment = line.split("#", 1)
+            label = label_part.strip()
+            comment = comment.strip()
+        else:
+            label = line.strip()
+            comment = ""
+        if label:
+            current.items.append(Item(label=label, comment=comment, section=current.title))
+    if current.items:
+        sections.append(current)
+    return sections
+
+
+def query_disabled(domain: str) -> set[str]:
+    result = subprocess.run(
+        ["sudo", "-n", "launchctl", "print-disabled", domain],
+        capture_output=True, text=True, check=False,
+    )
+    disabled: set[str] = set()
+    for line in result.stdout.splitlines():
+        m = re.match(r'\s*"([^"]+)"\s*=>\s*(true|disabled)\s*$', line)
+        if m:
+            disabled.add(m.group(1))
+    return disabled
+
+
+def refresh_state(sections: list[Section]) -> None:
+    sys_dis = query_disabled("system")
+    gui_dis = query_disabled(f"gui/{UID}")
+    for sec in sections:
+        for it in sec.items:
+            it.disabled = it.label in sys_dis or it.label in gui_dis
+            it.selected = not it.disabled
+
+
+def apply_changes(sections: list[Section]) -> tuple[int, int]:
+    to_disable: list[str] = []
+    to_enable: list[str] = []
+    for sec in sections:
+        for it in sec.items:
+            wants_enabled = it.selected
+            is_enabled = not it.disabled
+            if wants_enabled and not is_enabled:
+                to_enable.append(it.label)
+            elif not wants_enabled and is_enabled:
+                to_disable.append(it.label)
+
+    for label in to_disable:
+        for domain in (f"gui/{UID}", "system"):
+            subprocess.run(["sudo", "launchctl", "disable", f"{domain}/{label}"],
+                           capture_output=True, check=False)
+            subprocess.run(["sudo", "launchctl", "bootout", f"{domain}/{label}"],
+                           capture_output=True, check=False)
+    for label in to_enable:
+        for domain in (f"gui/{UID}", "system"):
+            subprocess.run(["sudo", "launchctl", "enable", f"{domain}/{label}"],
+                           capture_output=True, check=False)
+    return len(to_disable), len(to_enable)
+
+
+def prime_sudo() -> bool:
+    result = subprocess.run(["sudo", "-v"], check=False)
+    return result.returncode == 0
+
+
+def flat_index(sections: list[Section]) -> list[Item]:
+    out: list[Item] = []
+    for sec in sections:
+        for it in sec.items:
+            out.append(it)
+    return out
+
+
+def build_display_rows(sections: list[Section]) -> tuple[list[tuple[str, object]], dict[int, int]]:
+    """Return (display_rows, item_idx_to_row_idx).
+    display_rows entries: ("section", title) | ("item", Item) | ("blank", None)."""
+    rows: list[tuple[str, object]] = []
+    item_to_row: dict[int, int] = {}
+    item_idx = 0
+    for sec in sections:
+        rows.append(("section", sec.title))
+        for it in sec.items:
+            item_to_row[item_idx] = len(rows)
+            rows.append(("item", it))
+            item_idx += 1
+        rows.append(("blank", None))
+    return rows, item_to_row
+
+
+def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list[int]) -> None:
+    stdscr.erase()
+    h, w = stdscr.getmaxyx()
+    title = "mac-os-debloat  —  space=toggle  a=all  n=none  enter=apply  r=reload  q=quit"
+    stdscr.addnstr(0, 0, title[:w - 1], w - 1, curses.A_BOLD)
+
+    diff_count = sum(
+        1 for sec in sections for it in sec.items if it.selected == it.disabled
+    )
+    sub = f"pending changes: {diff_count}   (checked = enabled/running, unchecked = disabled)"
+    stdscr.addnstr(1, 0, sub[:w - 1], w - 1, curses.A_DIM)
+
+    rows, item_to_row = build_display_rows(sections)
+    content_top = 3
+    content_bottom = h - 1
+    visible_h = max(1, content_bottom - content_top)
+
+    cursor_row = item_to_row.get(cursor, 0)
+    so = scroll[0]
+    if cursor_row < so:
+        so = cursor_row
+    elif cursor_row >= so + visible_h:
+        so = cursor_row - visible_h + 1
+    so = max(0, min(so, max(0, len(rows) - visible_h)))
+    scroll[0] = so
+
+    flat = flat_index(sections)
+    item_by_id = {id(it): i for i, it in enumerate(flat)}
+
+    for screen_row, i in enumerate(range(so, min(so + visible_h, len(rows)))):
+        kind, payload = rows[i]
+        y = content_top + screen_row
+        if kind == "section":
+            line = f"── {payload} ".ljust(w - 1, "─")[:w - 1]
+            stdscr.addnstr(y, 0, line, w - 1, curses.A_DIM)
+        elif kind == "item":
+            it = payload  # type: ignore[assignment]
+            mark = "[✓]" if it.selected else "[ ]"
+            changed = " *" if it.selected == it.disabled else "  "
+            text = f"{changed}{mark}  {it.label:<48}  {it.comment}"
+            is_cursor = item_by_id.get(id(it)) == cursor
+            attr = curses.A_REVERSE if is_cursor else curses.A_NORMAL
+            stdscr.addnstr(y, 0, text[:w - 1], w - 1, attr)
+        # blank: leave row empty
+
+    if so > 0:
+        try:
+            stdscr.addnstr(content_top, max(0, w - 2), "↑", 1, curses.A_DIM)
+        except curses.error:
+            pass
+    if so + visible_h < len(rows):
+        try:
+            stdscr.addnstr(content_bottom - 1, max(0, w - 2), "↓", 1, curses.A_DIM)
+        except curses.error:
+            pass
+
+    if status:
+        stdscr.addnstr(h - 1, 0, status[:w - 1], w - 1, curses.A_BOLD)
+    stdscr.refresh()
+
+
+def run_tui(stdscr, sections: list[Section]) -> str | None:
+    curses.curs_set(0)
+    cursor = 0
+    status = ""
+    scroll = [0]
+    flat = flat_index(sections)
+    while True:
+        if not flat:
+            return "no labels"
+        cursor = max(0, min(cursor, len(flat) - 1))
+        draw(stdscr, sections, cursor, status, scroll)
+        status = ""
+        c = stdscr.getch()
+        if c in (ord("q"), 27):
+            return None
+        if c in (curses.KEY_DOWN, ord("j")):
+            cursor = min(cursor + 1, len(flat) - 1)
+        elif c in (curses.KEY_UP, ord("k")):
+            cursor = max(cursor - 1, 0)
+        elif c == curses.KEY_NPAGE:
+            cursor = min(cursor + 10, len(flat) - 1)
+        elif c == curses.KEY_PPAGE:
+            cursor = max(cursor - 10, 0)
+        elif c == ord(" "):
+            flat[cursor].selected = not flat[cursor].selected
+        elif c == ord("a"):
+            for it in flat:
+                it.selected = True
+        elif c == ord("n"):
+            for it in flat:
+                it.selected = False
+        elif c == ord("r"):
+            curses.endwin()
+            if not prime_sudo():
+                return "sudo failed"
+            refresh_state(sections)
+            stdscr.clear()
+            status = "state reloaded"
+        elif c in (curses.KEY_ENTER, 10, 13):
+            curses.endwin()
+            if not prime_sudo():
+                return "sudo failed"
+            disabled_n, enabled_n = apply_changes(sections)
+            refresh_state(sections)
+            stdscr.clear()
+            status = f"applied: {disabled_n} disabled, {enabled_n} enabled"
+
+
+VERSION = "0.1.0"
+
+
+def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+        print(__doc__ or "")
+        print(f"\nUsage: debloat [-h|--help|-v|--version]\nVersion: {VERSION}")
+        return 0
+    if len(sys.argv) > 1 and sys.argv[1] in ("-v", "--version"):
+        print(f"mac-os-debloat {VERSION}")
+        return 0
+    if LABELS_FILE and LABELS_FILE.exists():
+        sections = parse_labels(LABELS_FILE)
+        source_note = f"loaded labels from {LABELS_FILE}"
+    else:
+        sections = parse_labels(EMBEDDED_LABELS)
+        source_note = "using embedded labels (no labels.txt found)"
+    if not sections:
+        print("no labels parsed", file=sys.stderr)
+        return 1
+    print(source_note)
+    print("priming sudo...")
+    if not prime_sudo():
+        print("sudo required to read launchd state", file=sys.stderr)
+        return 1
+    refresh_state(sections)
+    result = curses.wrapper(run_tui, sections)
+    if result:
+        print(result)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
