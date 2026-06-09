@@ -1,7 +1,7 @@
 {
   "name": "@oleksandr_krupko/mac-os-debloat",
-  "version": "0.1.3",
-  "description": "Debloat your Mac from the terminal. Interactive console util to disable 91 non-essential macOS launchd services. Frees ~1.5-2GB RAM. macOS Tahoe + Apple Silicon. Zero deps.",
+  "version": "0.2.0",
+  "description": "Debloat your Mac from the terminal. Interactive console util to disable 245 non-essential macOS launchd services + Spotlight + watcher LaunchDaemon that kills respawners. macOS Tahoe + Apple Silicon. Zero deps.",
   "bin": {
     "mac-os-debloat": "bin/cli.js",
     "debloat": "bin/cli.js"
