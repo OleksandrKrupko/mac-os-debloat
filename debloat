@@ -6,9 +6,12 @@ applies diff with sudo on Enter. Persistent across reboot.
 
 Keys:
   ↑/↓ or j/k   navigate
-  space        toggle
-  a            check all
-  n            uncheck all
+  PgUp/PgDn    jump 10
+  [/]          jump to prev/next section
+  space        toggle current
+  x            toggle whole section
+  s / S        uncheck / check whole section
+  a / n        check / uncheck all
   enter        apply changes (prompts sudo)
   r            reload state from system
   q            quit
@@ -146,6 +149,31 @@ com.apple.cloudd                              # iCloud sync core
 com.apple.routined                            # significant locations / location-aware reminders
 com.apple.homeenergyd                         # Home Energy widget
 com.apple.AppPredictionIntentsHelperService   # app prediction (which app you'll open next)
+
+# === Time Machine ===
+com.apple.backupd                             # Time Machine core backup daemon
+com.apple.ReplicatorCore                      # Time Machine replicator
+com.apple.talagentd                           # Time Machine listener agent
+
+# === Focus / DND / Screen Time ===
+com.apple.donotdisturbd                       # Focus modes / Do Not Disturb
+com.apple.ScreenTimeAgent                     # Screen Time usage tracking
+
+# === Apple Media Services / iPhone telephony / contacts ===
+com.apple.amsaccountsd                        # Apple Media Services account state
+com.apple.amsondevicestoraged                 # App Store on-device storage scan
+com.apple.CommCenter                          # iPhone cellular call relay (no iPhone)
+com.apple.postersyncd                         # Contacts profile picture sync
+
+# === More AI/ML stragglers ===
+com.apple.mlhostd                             # ML host daemon
+com.apple.modelmanagerd                       # Apple Intelligence model manager
+
+# === Cosmetic / app daemons ===
+com.apple.PowerChime                          # laptop charging chime sound
+com.apple.bookstoreagent                      # Apple Books
+com.apple.tvagent                             # Apple TV app
+com.apple.podcasts                            # Podcasts daemon
 """
 
 _SCRIPT_FILE = globals().get("__file__")
@@ -257,6 +285,37 @@ def flat_index(sections: list[Section]) -> list[Item]:
     return out
 
 
+def section_of(sections: list[Section], item: Item) -> Section | None:
+    for sec in sections:
+        if item in sec.items:
+            return sec
+    return None
+
+
+def jump_section(sections: list[Section], flat: list[Item], cursor: int, direction: int) -> int:
+    """Move cursor to first item of next/prev section."""
+    sec_start_indices: list[int] = []
+    idx = 0
+    for sec in sections:
+        if sec.items:
+            sec_start_indices.append(idx)
+            idx += len(sec.items)
+    if not sec_start_indices:
+        return cursor
+    if direction > 0:
+        for s in sec_start_indices:
+            if s > cursor:
+                return s
+        return sec_start_indices[-1]
+    else:
+        prev = sec_start_indices[0]
+        for s in sec_start_indices:
+            if s >= cursor:
+                return prev
+            prev = s
+        return sec_start_indices[-1]
+
+
 def build_display_rows(sections: list[Section]) -> tuple[list[tuple[str, object]], dict[int, int]]:
     """Return (display_rows, item_idx_to_row_idx).
     display_rows entries: ("section", title) | ("item", Item) | ("blank", None)."""
@@ -276,7 +335,7 @@ def build_display_rows(sections: list[Section]) -> tuple[list[tuple[str, object]
 def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list[int]) -> None:
     stdscr.erase()
     h, w = stdscr.getmaxyx()
-    title = "mac-os-debloat  —  space=toggle  a=all  n=none  enter=apply  r=reload  q=quit"
+    title = "mac-os-debloat  —  space=toggle  x=section-toggle  s/S=section-off/on  [/]=jump  a/n=all/none  enter=apply  q=quit"
     stdscr.addnstr(0, 0, title[:w - 1], w - 1, curses.A_BOLD)
 
     diff_count = sum(
@@ -365,6 +424,29 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
         elif c == ord("n"):
             for it in flat:
                 it.selected = False
+        elif c == ord("s"):
+            sec = section_of(sections, flat[cursor])
+            if sec:
+                for it in sec.items:
+                    it.selected = False
+                status = f"unchecked section: {sec.title}"
+        elif c == ord("S"):
+            sec = section_of(sections, flat[cursor])
+            if sec:
+                for it in sec.items:
+                    it.selected = True
+                status = f"checked section: {sec.title}"
+        elif c == ord("x"):
+            sec = section_of(sections, flat[cursor])
+            if sec:
+                all_on = all(it.selected for it in sec.items)
+                for it in sec.items:
+                    it.selected = not all_on
+                status = f"toggled section: {sec.title}"
+        elif c == ord("]"):
+            cursor = jump_section(sections, flat, cursor, direction=1)
+        elif c == ord("["):
+            cursor = jump_section(sections, flat, cursor, direction=-1)
         elif c == ord("r"):
             curses.endwin()
             if not prime_sudo():
@@ -382,7 +464,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             status = f"applied: {disabled_n} disabled, {enabled_n} enabled"
 
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 
 
 def main() -> int:

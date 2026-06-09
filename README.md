@@ -2,7 +2,7 @@
 
 **Debloat your Mac from the terminal. Zero dependencies. Zero install.**
 
-Interactive console util to disable 76 non-essential macOS launchd services. Reclaims ~1.5 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
+Interactive console util to disable 91 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
 
 ```bash
 npx -y @oleksandr_krupko/mac-os-debloat
@@ -50,7 +50,7 @@ pending changes: 4   (checked = enabled/running, unchecked = disabled)
 <details>
 <summary><b>What it disables</b></summary>
 
-76 labels across 21 sections:
+91 labels across 26 sections:
 
 - Siri / voice assistant (11)
 - Apple Intelligence — Tahoe (10), incl. `contextstored` (known >30 GB memory leak)
@@ -85,9 +85,11 @@ Full curated list with per-label comments lives inside the script (`EMBEDDED_LAB
 |-----|--------|
 | `↑` / `↓` or `j` / `k` | navigate |
 | `PgUp` / `PgDn` | jump 10 |
-| `space` | toggle current |
-| `a` | check all |
-| `n` | uncheck all |
+| `[` / `]` | jump to prev / next section |
+| `space` | toggle current item |
+| `x` | toggle whole section under cursor |
+| `s` / `S` | uncheck / check whole section |
+| `a` / `n` | check / uncheck all |
 | `enter` | apply changes (prompts sudo) |
 | `r` | reload state from system |
 | `q` / `esc` | quit |
