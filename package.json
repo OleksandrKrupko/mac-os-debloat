@@ -1,0 +1,47 @@
+{
+  "name": "@oleksandr_krupko/mac-os-debloat",
+  "version": "0.1.1",
+  "description": "Debloat your Mac from the terminal. Interactive console util to disable 76 non-essential macOS launchd services. Frees ~1.5GB RAM. macOS Tahoe + Apple Silicon. Zero deps.",
+  "bin": {
+    "mac-os-debloat": "bin/cli.js",
+    "debloat": "bin/cli.js"
+  },
+  "files": [
+    "bin/cli.js",
+    "debloat",
+    "README.md",
+    "LICENSE"
+  ],
+  "os": ["darwin"],
+  "engines": {
+    "node": ">=14"
+  },
+  "homepage": "https://github.com/OleksandrKrupko/mac-os-debloat",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OleksandrKrupko/mac-os-debloat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/OleksandrKrupko/mac-os-debloat/issues"
+  },
+  "license": "MIT",
+  "author": "Oleksandr Krupko",
+  "keywords": [
+    "macos",
+    "tahoe",
+    "macos-tahoe",
+    "apple-silicon",
+    "debloat",
+    "macos-debloat",
+    "launchctl",
+    "launchd",
+    "console",
+    "cli",
+    "tui",
+    "apple-intelligence",
+    "disable-siri",
+    "free-ram",
+    "privacy",
+    "performance"
+  ]
+}
