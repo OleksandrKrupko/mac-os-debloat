@@ -2,7 +2,7 @@
 
 **Debloat your Mac from the terminal. Zero dependencies. Zero install.**
 
-Interactive console util to disable 91 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
+Interactive console util to disable 243 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
 
 ```bash
 npx -y @oleksandr_krupko/mac-os-debloat
@@ -23,13 +23,13 @@ brew install OleksandrKrupko/debloat/debloat && debloat
 ## Screenshot
 
 ```
-mac-os-debloat  —  space=toggle  a=all  n=none  enter=apply  r=reload  q=quit
-pending changes: 4   (checked = enabled/running, unchecked = disabled)
+mac-os-debloat  —  space=toggle  x=sec-toggle  s/S=sec-off/on  [/]=jump  a/n=all/none  p=spotlight  enter=apply  q=quit
+pending: 4   (spotlight: ON)   (checked = enabled/running)
 
 ── Siri / voice assistant ──────────────────────────────────────────────────
  *[ ]  com.apple.assistantd                          Siri core
  *[ ]  com.apple.Siri.agent                          Siri agent
-  [ ]  com.apple.SiriTTSService.TrainingAgent        Siri voice training
+  [ ]  com.apple.SiriTTSTrainingAgent                Siri voice training
   [ ]  com.apple.siriinferenced                      on-device Siri inference
  *[ ]  com.apple.siriknowledged                      Siri knowledge graph
   [ ]  com.apple.assistant_cdmd                      Siri continuous dialog manager
@@ -50,29 +50,26 @@ pending changes: 4   (checked = enabled/running, unchecked = disabled)
 <details>
 <summary><b>What it disables</b></summary>
 
-91 labels across 26 sections:
+243 labels across 69 sections. Highlights:
 
-- Siri / voice assistant (11)
+- Siri / voice assistant (12)
 - Apple Intelligence — Tahoe (10), incl. `contextstored` (known >30 GB memory leak)
-- Telemetry / analytics (2)
-- AirDrop / Continuity (2)
-- Diagnostics / crash reports (4)
-- Apple ads (3)
-- Proactive / predictive (4)
-- Game Center / AirPlay receiver (4)
-- Photos analysis (2)
-- News / Stocks / Weather (3)
-- Apple ID nags / Family (2)
-- iMessage / FaceTime / phone relay (5)
-- HomeKit (1)
-- Apple Mail / Calendar / Contacts / Reminders (4)
-- Speech / dictation (2)
-- Wallpaper / thumbnails (2)
-- App Store + update nags (3, keeps `softwareupdated` for security)
-- Misc dead weight (5)
-- iCloud (2)
-- Location / prediction extras (3)
-- Misc (2)
+- More AI / Apple Intelligence (12) — CoreSpotlight semantic, call intelligence, intelligence flow / tasks
+- Diagnostics extras (21) — all telemetry to Apple
+- Apple Music Player (AMP) suite (5), Apple Music / iTunes / Media streaming (7)
+- Safari + Safari extras (9) — for non-Safari users
+- Game Center, Game controllers, Game policy (9)
+- Family / Parental controls (5)
+- Beta program enrollment (5)
+- iMessage / FaceTime / phone relay (6)
+- Apple Mail / Calendar / Contacts / Reminders + AddressBook (7)
+- Continuity / AirPlay / Sidecar / Continuity Capture (~9)
+- Maps, Apple Books, Apple TV+, Stocks/News/Weather/Sports
+- App Store + Apple ID + Apple Pay + SSO
+- iCloud Drive / Keychain Circle / Notifications
+- Print (no printer), Touch Bar (M4 has none), bridgeOS (Apple Silicon)
+- Xcode / iOS dev stack (FE/BE dev, no mobile)
+- Telemetry + Apple ads + Proactive / predictive + News / Stocks / Weather
 
 Full curated list with per-label comments lives inside the script (`EMBEDDED_LABELS`).
 
@@ -90,6 +87,7 @@ Full curated list with per-label comments lives inside the script (`EMBEDDED_LAB
 | `x` | toggle whole section under cursor |
 | `s` / `S` | uncheck / check whole section |
 | `a` / `n` | check / uncheck all |
+| `p` | toggle Spotlight indexing on root volume |
 | `enter` | apply changes (prompts sudo) |
 | `r` | reload state from system |
 | `q` / `esc` | quit |
@@ -153,7 +151,7 @@ Tested on M4 MacBook Pro 16 GB · macOS 26.3.1.
 
 | Tool | Console UI | Curated list | Persistent | Zero install |
 |------|-----------|--------------|------------|--------------|
-| **mac-os-debloat** | ✓ | ✓ 76 labels | ✓ | ✓ Python stdlib |
+| **mac-os-debloat** | ✓ | ✓ 243 labels | ✓ | ✓ Python stdlib |
 | [launchtui](https://github.com/macournoyer/launchtui) | ✓ | ✗ generic | ✗ bootout only | ✗ `cargo install` |
 | [Silverback-Debloater](https://github.com/Wamphyre/macOS_Silverback-Debloater) | ✗ | ✓ | ✓ | ✗ Intel-desktop only |
 | [b0gdanw Tahoe gist](https://gist.github.com/b0gdanw/0c20c2fd5d0a7e6cff01849b57108967) | ✗ | ✓ | ✓ | gist copy |
