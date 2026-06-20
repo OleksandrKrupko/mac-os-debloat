@@ -574,15 +574,24 @@ def prime_sudo() -> bool:
     return result.returncode == 0
 
 
-def spotlight_enabled() -> bool:
-    """Return True if Spotlight indexing is enabled on the root volume."""
+def spotlight_state() -> str:
+    """Return 'on', 'off', or 'indexing' for the root data volume.
+
+    A wiped/rebuilding index reports neither enabled nor disabled but an
+    "unknown" state, which means a reindex is in progress (truly on once done).
+    """
     r = subprocess.run(["mdutil", "-s", "/System/Volumes/Data"],
                        capture_output=True, text=True, check=False)
-    return "Indexing enabled" in r.stdout
+    if "Indexing enabled" in r.stdout:
+        return "on"
+    if "Indexing disabled" in r.stdout:
+        return "off"
+    return "indexing"
 
 
 def spotlight_status_line() -> str:
-    return f"spotlight: {'ON' if spotlight_enabled() else 'OFF'}"
+    label = {"on": "ON", "off": "OFF", "indexing": "INDEXING (rebuilding)"}[spotlight_state()]
+    return f"spotlight: {label}"
 
 
 def spotlight_set(enabled: bool) -> tuple[bool, str]:
@@ -591,7 +600,16 @@ def spotlight_set(enabled: bool) -> tuple[bool, str]:
                        capture_output=True, text=True, check=False)
     if r.returncode != 0:
         return False, f"mdutil failed: {r.stderr.strip()}"
-    return True, f"spotlight indexing {'enabled' if enabled else 'disabled'}"
+    if enabled:
+        # `-i on` only sets the flag; a previously disabled index stays in an
+        # "unknown" state and never rebuilds, so Finder metadata queries hang.
+        # Force a clean erase+reindex so enabling is truly on.
+        e = subprocess.run(["sudo", "mdutil", "-a", "-E"],
+                           capture_output=True, text=True, check=False)
+        if e.returncode != 0:
+            return False, f"mdutil -E failed: {e.stderr.strip()}"
+        return True, "spotlight indexing enabled - reindex running (~10-30 min)"
+    return True, "spotlight indexing disabled"
 
 
 def flat_index(sections: list[Section]) -> list[Item]:
@@ -706,7 +724,10 @@ def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list
             pass
 
     if status:
-        stdscr.addnstr(h - 1, 0, status[:w - 1], w - 1, curses.A_BOLD)
+        try:
+            stdscr.addnstr(h - 1, 0, status[:w - 1], w - 1, curses.A_BOLD)
+        except curses.error:
+            pass
     stdscr.refresh()
 
 
@@ -775,7 +796,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             curses.endwin()
             if not prime_sudo():
                 return "sudo failed"
-            ok, msg = spotlight_set(not spotlight_enabled())
+            ok, msg = spotlight_set(spotlight_state() == "off")
             stdscr.clear()
             status = msg
         elif c in (curses.KEY_ENTER, 10, 13):
