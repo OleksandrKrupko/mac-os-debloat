@@ -2,7 +2,7 @@
 
 **Debloat your Mac from the terminal. Zero dependencies. Zero install.**
 
-Interactive console util to disable 243 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
+Interactive console util to disable 269 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
 
 ```bash
 npx -y @oleksandr_krupko/mac-os-debloat
@@ -39,10 +39,10 @@ pending: 4   (spotlight: ON)   (checked = enabled/running)
   [✓]  com.apple.intelligenceplatformd               Apple Intelligence platform
 
 ── Apple Intelligence (Tahoe) ────────────────────────────────────────────── ↓
-  [✓]  com.apple.intelligenced                       Apple Intelligence core
-► [✓]  com.apple.aiml.appleintelligenceserviced      AI/ML service
-  [✓]  com.apple.PrivacyIntelligence                 privacy-preserving AI
-  [✓]  com.apple.mlruntime                           ML runtime
+  [✓]  com.apple.mlruntimed                          ML runtime
+► [✓]  com.apple.privatecloudcomputed                Private Cloud Compute (AI cloud offload)
+  [✓]  com.apple.modelmanagerd                       AI model manager / downloads
+  [✓]  com.apple.naturallanguaged                    NaturalLanguage framework daemon
   [✓]  com.apple.generativeexperiencesd              Writing Tools / generative AI
   [✓]  com.apple.contextstored                       context store (>30GB memory leak)
 ```
@@ -50,20 +50,20 @@ pending: 4   (spotlight: ON)   (checked = enabled/running)
 <details>
 <summary><b>What it disables</b></summary>
 
-243 labels across 69 sections. Highlights:
+269 labels across 69 sections. Highlights:
 
 - Siri / voice assistant (12)
-- Apple Intelligence — Tahoe (10), incl. `contextstored` (known >30 GB memory leak)
-- More AI / Apple Intelligence (12) — CoreSpotlight semantic, call intelligence, intelligence flow / tasks
-- Diagnostics extras (21) — all telemetry to Apple
+- Apple Intelligence — Tahoe (10), incl. `contextstored` (known >30 GB memory leak) and `privatecloudcomputed`
+- More AI / Apple Intelligence (11) — CoreSpotlight semantic, call intelligence, intelligence flow / tasks
+- Diagnostics extras (30) — all telemetry to Apple
 - Apple Music Player (AMP) suite (5), Apple Music / iTunes / Media streaming (7)
-- Safari + Safari extras (9) — for non-Safari users
-- Game Center, Game controllers, Game policy (9)
-- Family / Parental controls (5)
-- Beta program enrollment (5)
-- iMessage / FaceTime / phone relay (6)
+- Safari + Safari extras (7) — for non-Safari users
+- Game Center, Game controllers, Game policy (7)
+- Family / Parental controls (8)
+- Beta program enrollment (6)
+- iMessage / FaceTime / phone relay (10)
 - Apple Mail / Calendar / Contacts / Reminders + AddressBook (7)
-- Continuity / AirPlay / Sidecar / Continuity Capture (~9)
+- Continuity / AirPlay / Sidecar / Continuity Capture (~8)
 - Maps, Apple Books, Apple TV+, Stocks/News/Weather/Sports
 - App Store + Apple ID + Apple Pay + SSO
 - iCloud Drive / Keychain Circle / Notifications
@@ -151,7 +151,7 @@ Tested on M4 MacBook Pro 16 GB · macOS 26.3.1.
 
 | Tool | Console UI | Curated list | Persistent | Zero install |
 |------|-----------|--------------|------------|--------------|
-| **mac-os-debloat** | ✓ | ✓ 243 labels | ✓ | ✓ Python stdlib |
+| **mac-os-debloat** | ✓ | ✓ 269 labels | ✓ | ✓ Python stdlib |
 | [launchtui](https://github.com/macournoyer/launchtui) | ✓ | ✗ generic | ✗ bootout only | ✗ `cargo install` |
 | [Silverback-Debloater](https://github.com/Wamphyre/macOS_Silverback-Debloater) | ✗ | ✓ | ✓ | ✗ Intel-desktop only |
 | [b0gdanw Tahoe gist](https://gist.github.com/b0gdanw/0c20c2fd5d0a7e6cff01849b57108967) | ✗ | ✓ | ✓ | gist copy |
