@@ -819,7 +819,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
                     sys.stderr.write(f"  {label}  pids={pids}\n")
 
 
-VERSION = "0.3.0"
+VERSION = "0.3.2"
 
 
 def main() -> int:
