@@ -1,7 +1,7 @@
 {
   "name": "@oleksandr_krupko/mac-os-debloat",
-  "version": "0.4.0",
-  "description": "Debloat your Mac from the terminal. Interactive console util to disable 269 non-essential macOS launchd services + Spotlight toggle. macOS Tahoe + Apple Silicon. Zero deps.",
+  "version": "0.5.0",
+  "description": "Debloat your Mac from the terminal. SIP-safe interactive console util to disable 269 non-essential macOS launchd services + Spotlight toggle. Self-validates against your macOS build. macOS Tahoe + Apple Silicon. Zero deps.",
   "bin": {
     "mac-os-debloat": "bin/cli.js",
     "debloat": "bin/cli.js"

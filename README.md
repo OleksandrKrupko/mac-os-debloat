@@ -4,6 +4,8 @@
 
 Interactive console util to disable 269 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
 
+**No SIP disable required** — works with System Integrity Protection fully on. It validates every service against your actual system at launch, so it never acts on a label that doesn't exist on your macOS build.
+
 ```bash
 npx -y @oleksandr_krupko/mac-os-debloat
 ```
@@ -19,6 +21,23 @@ Or via Homebrew:
 ```bash
 brew install OleksandrKrupko/debloat/debloat && debloat
 ```
+
+## Commands
+
+Runs the interactive TUI by default. Non-interactive flags for scripting and quick recovery:
+
+```bash
+debloat                 # interactive TUI (default)
+debloat --status        # disabled/enabled counts, spotlight, reclaimable RAM
+debloat --audit         # list any embedded labels not present on your macOS build
+debloat --disable-all   # disable every non-essential service (prompts sudo)
+debloat --enable-all    # re-enable everything — the panic button
+debloat --restore       # revert to the state before your last apply
+debloat --dry-run       # with --disable-all/--enable-all: preview, apply nothing
+debloat --status --json # machine-readable status
+```
+
+`--status`, `--audit`, and `--dry-run` need no sudo — reading launchd state is unprivileged. Every apply first snapshots your current state to `~/.mac-os-debloat/latest.json`, so `--restore` always brings you back. If anything feels off, `debloat --enable-all` turns it all back on.
 
 ## Screenshot
 
@@ -142,20 +161,20 @@ macOS Tahoe (26.x) baselines at ~4-5 GB RAM and a steady CPU drip from ~50 Apple
 
 This tool kills the ones you don't need, persistently, with a single console util and no install. ~1.5 GB RAM and a few % CPU back for whatever you're actually running — compilers, browsers, VMs, model inference, video editing, games, whatever.
 
-Tested on M4 MacBook Pro 16 GB · macOS 26.3.1.
+The ~1.5-2 GB figure is the drop in used memory on an idle M4 MacBook Pro 16 GB (macOS 26.3.1) after disabling the full default set and rebooting, compared beforehand. Your number depends on which services you actually run — check `debloat --status` for the reclaimable RAM on your own machine before and after.
 
 </details>
 
 <details>
 <summary><b>Comparison</b></summary>
 
-| Tool | Console UI | Curated list | Persistent | Zero install |
-|------|-----------|--------------|------------|--------------|
-| **mac-os-debloat** | ✓ | ✓ 269 labels | ✓ | ✓ Python stdlib |
-| [launchtui](https://github.com/macournoyer/launchtui) | ✓ | ✗ generic | ✗ bootout only | ✗ `cargo install` |
-| [Silverback-Debloater](https://github.com/Wamphyre/macOS_Silverback-Debloater) | ✗ | ✓ | ✓ | ✗ Intel-desktop only |
-| [b0gdanw Tahoe gist](https://gist.github.com/b0gdanw/0c20c2fd5d0a7e6cff01849b57108967) | ✗ | ✓ | ✓ | gist copy |
-| LaunchControl / Lingon | GUI | ✗ | ✓ | ✗ commercial |
+| Tool | Console UI | Curated list | Persistent | No SIP disable | Zero install |
+|------|-----------|--------------|------------|----------------|--------------|
+| **mac-os-debloat** | ✓ | ✓ 269 labels | ✓ | ✓ | ✓ Python stdlib |
+| [launchtui](https://github.com/macournoyer/launchtui) | ✓ | ✗ generic | ✗ bootout only | ✓ | ✗ `cargo install` |
+| [Silverback-Debloater](https://github.com/Wamphyre/macOS_Silverback-Debloater) | ✗ | ✓ | ✓ | ✓ | ✗ Intel-desktop only |
+| [b0gdanw Tahoe gist](https://gist.github.com/b0gdanw/0c20c2fd5d0a7e6cff01849b57108967) | ✗ | ✓ | ✓ | ✗ needs SIP off | gist copy |
+| LaunchControl / Lingon | GUI | ✗ | ✓ | ✓ | ✗ commercial |
 
 </details>
 

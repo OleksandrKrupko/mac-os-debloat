@@ -19,14 +19,27 @@ Keys:
 from __future__ import annotations
 
 import curses
+import glob
+import json
 import os
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 UID = os.getuid()
+BACKUP_DIR = Path.home() / ".mac-os-debloat"
+
+LAUNCHD_DIRS = (
+    "/System/Library/LaunchDaemons",
+    "/System/Library/LaunchAgents",
+    "/System/Cryptexes/App/System/Library/LaunchDaemons",
+    "/System/Cryptexes/App/System/Library/LaunchAgents",
+    "/Library/Apple/System/Library/LaunchDaemons",
+    "/Library/Apple/System/Library/LaunchAgents",
+)
 
 EMBEDDED_LABELS = """\
 # Format: label  # comment (what breaks if disabled)
@@ -489,9 +502,46 @@ def parse_labels(source: Path | str) -> list[Section]:
     return sections
 
 
+def installed_plist_labels() -> set[str]:
+    names: set[str] = set()
+    for d in LAUNCHD_DIRS:
+        for p in glob.glob(d + "/*.plist"):
+            names.add(os.path.basename(p)[:-6])
+    return names
+
+
+def label_present(label: str, plist_names: set[str]) -> bool:
+    if label in plist_names:
+        return True
+    for domain in ("system", f"gui/{UID}"):
+        r = subprocess.run(["launchctl", "print", f"{domain}/{label}"],
+                           capture_output=True, check=False)
+        if r.returncode == 0:
+            return True
+    return False
+
+
+def drop_absent_labels(sections: list[Section]) -> list[str]:
+    """Remove labels that don't exist on this macOS build (renamed/removed by
+    Apple, or wrong on this OS). Returns the dropped labels so callers can
+    report them. Prevents phantom entries showing as enabled no-ops."""
+    plist_names = installed_plist_labels()
+    absent: list[str] = []
+    for sec in sections:
+        keep: list[Item] = []
+        for it in sec.items:
+            if label_present(it.label, plist_names):
+                keep.append(it)
+            else:
+                absent.append(it.label)
+        sec.items = keep
+    sections[:] = [s for s in sections if s.items]
+    return absent
+
+
 def query_disabled(domain: str) -> set[str]:
     result = subprocess.run(
-        ["sudo", "-n", "launchctl", "print-disabled", domain],
+        ["launchctl", "print-disabled", domain],
         capture_output=True, text=True, check=False,
     )
     disabled: set[str] = set()
@@ -544,9 +594,7 @@ def find_pids_for_labels(labels: list[str]) -> dict[str, list[int]]:
     return out
 
 
-def apply_changes(sections: list[Section]) -> dict:
-    import time
-
+def pending_changes(sections: list[Section]) -> tuple[list[str], list[str]]:
     to_disable: list[str] = []
     to_enable: list[str] = []
     for sec in sections:
@@ -557,6 +605,11 @@ def apply_changes(sections: list[Section]) -> dict:
                 to_enable.append(it.label)
             elif not wants_enabled and is_enabled:
                 to_disable.append(it.label)
+    return to_disable, to_enable
+
+
+def apply_changes(sections: list[Section]) -> dict:
+    to_disable, to_enable = pending_changes(sections)
 
     # Phase 1: launchctl disable + bootout (or enable)
     for label in to_disable:
@@ -829,6 +882,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             curses.endwin()
             if not prime_sudo():
                 return "sudo failed"
+            write_snapshot(sections)
             result = apply_changes(sections)
             refresh_state(sections)
             stdscr.clear()
@@ -845,31 +899,198 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
                     sys.stderr.write(f"  {label}  pids={pids}\n")
 
 
-VERSION = "0.4.0"
+def macos_major() -> int | None:
+    r = subprocess.run(["sw_vers", "-productVersion"],
+                       capture_output=True, text=True, check=False)
+    part = r.stdout.strip().split(".")[0]
+    return int(part) if part.isdigit() else None
+
+
+def mem_free_mb() -> int | None:
+    """Reclaimable RAM (free + inactive + speculative + purgeable) in MB."""
+    r = subprocess.run(["vm_stat"], capture_output=True, text=True, check=False)
+    if r.returncode != 0:
+        return None
+    page = re.search(r"page size of (\d+) bytes", r.stdout)
+    if not page:
+        return None
+    page_bytes = int(page.group(1))
+    pages = 0
+    for key in ("Pages free", "Pages inactive", "Pages speculative", "Pages purgeable"):
+        m = re.search(rf"{key}:\s+(\d+)\.", r.stdout)
+        if m:
+            pages += int(m.group(1))
+    return pages * page_bytes // (1024 * 1024)
+
+
+def write_snapshot(sections: list[Section]) -> Path:
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    disabled = [it.label for sec in sections for it in sec.items if it.disabled]
+    build = subprocess.run(["sw_vers", "-buildVersion"],
+                           capture_output=True, text=True, check=False).stdout.strip()
+    snap = {"build": build, "disabled": disabled}
+    (BACKUP_DIR / "latest.json").write_text(json.dumps(snap, indent=2))
+    return BACKUP_DIR / "latest.json"
+
+
+def load_snapshot() -> dict | None:
+    path = BACKUP_DIR / "latest.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text())
+
+
+def run_apply(sections: list[Section], dry_run: bool) -> int:
+    to_disable, to_enable = pending_changes(sections)
+    if not to_disable and not to_enable:
+        print("nothing to change — already in the requested state")
+        return 0
+    if dry_run:
+        print(f"[dry-run] would disable {len(to_disable)}, enable {len(to_enable)}:")
+        for label in to_disable:
+            print(f"  disable  {label}")
+        for label in to_enable:
+            print(f"  enable   {label}")
+        return 0
+    if not prime_sudo():
+        print("sudo required to change launchd state", file=sys.stderr)
+        return 1
+    write_snapshot(sections)
+    result = apply_changes(sections)
+    print(f'applied: {result["disabled"]} disabled, {result["enabled"]} enabled, '
+          f'{result["killed"]} killed')
+    stragglers = result["stragglers"]
+    if stragglers:
+        print(f"{len(stragglers)} respawned by launchd:", file=sys.stderr)
+        for label, pids in stragglers.items():
+            print(f"  {label}  pids={pids}", file=sys.stderr)
+    return 0
+
+
+def cmd_status(sections: list[Section], as_json: bool) -> int:
+    refresh_state(sections)
+    disabled = sum(1 for sec in sections for it in sec.items if it.disabled)
+    total = sum(len(sec.items) for sec in sections)
+    spot = spotlight_state()
+    free = mem_free_mb()
+    if as_json:
+        print(json.dumps({
+            "labels_present": total,
+            "disabled": disabled,
+            "enabled": total - disabled,
+            "spotlight": spot,
+            "reclaimable_ram_mb": free,
+        }, indent=2))
+        return 0
+    print(f"labels present on this macOS: {total}")
+    print(f"  disabled: {disabled}   enabled: {total - disabled}")
+    print(f"spotlight: {spot}")
+    if free is not None:
+        print(f"reclaimable RAM now: ~{free} MB")
+    return 0
+
+
+def cmd_audit(sections: list[Section], absent: list[str]) -> int:
+    present = sum(len(sec.items) for sec in sections)
+    print(f"{present} labels present on this macOS build.")
+    if absent:
+        print(f"\n{len(absent)} embedded labels NOT present on this build (skipped):")
+        for label in absent:
+            print(f"  {label}")
+    else:
+        print("all embedded labels exist on this build.")
+    return 0
+
+
+def cmd_restore(sections: list[Section]) -> int:
+    snap = load_snapshot()
+    if snap is None:
+        print(f"no backup found at {BACKUP_DIR / 'latest.json'}", file=sys.stderr)
+        return 1
+    if not prime_sudo():
+        print("sudo required to change launchd state", file=sys.stderr)
+        return 1
+    refresh_state(sections)
+    prev_disabled = set(snap["disabled"])
+    for sec in sections:
+        for it in sec.items:
+            it.selected = it.label not in prev_disabled
+    print(f"restoring pre-apply state ({len(prev_disabled)} were disabled)...")
+    return run_apply(sections, dry_run=False)
+
+
+def load_sections() -> tuple[list[Section], str, list[str]]:
+    if LABELS_FILE and LABELS_FILE.exists():
+        sections = parse_labels(LABELS_FILE)
+        note = f"loaded labels from {LABELS_FILE}"
+    else:
+        sections = parse_labels(EMBEDDED_LABELS)
+        note = "using embedded labels (no labels.txt found)"
+    absent = drop_absent_labels(sections)
+    return sections, note, absent
+
+
+VERSION = "0.5.0"
+
+HELP = f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services.
+
+Runs a live SIP-safe launchctl TUI by default (no SIP disable required).
+
+Usage:
+  debloat                 interactive TUI (default)
+  debloat --status        print disabled/enabled counts, spotlight, free RAM
+  debloat --audit         list embedded labels not present on this macOS build
+  debloat --disable-all   disable every non-essential service (prompts sudo)
+  debloat --enable-all    re-enable everything — the panic button
+  debloat --restore       revert to the state before your last apply
+  debloat --dry-run       with --disable-all/--enable-all: preview, don't apply
+  debloat --json          with --status: machine-readable output
+  debloat -v|--version    print version
+  debloat -h|--help       this help
+"""
 
 
 def main() -> int:
-    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
-        print(__doc__ or "")
-        print(f"\nUsage: debloat [-h|--help|-v|--version]\nVersion: {VERSION}")
+    argv = sys.argv[1:]
+    if "-h" in argv or "--help" in argv:
+        print(HELP)
         return 0
-    if len(sys.argv) > 1 and sys.argv[1] in ("-v", "--version"):
+    if "-v" in argv or "--version" in argv:
         print(f"mac-os-debloat {VERSION}")
         return 0
-    if LABELS_FILE and LABELS_FILE.exists():
-        sections = parse_labels(LABELS_FILE)
-        source_note = f"loaded labels from {LABELS_FILE}"
-    else:
-        sections = parse_labels(EMBEDDED_LABELS)
-        source_note = "using embedded labels (no labels.txt found)"
+
+    major = macos_major()
+    if major is not None and major != 26:
+        print(f"warning: labels curated for macOS Tahoe (26.x); this is {major}.x — "
+              f"some may not apply. Run `debloat --audit` to see what's skipped.",
+              file=sys.stderr)
+
+    sections, source_note, absent = load_sections()
     if not sections:
         print("no labels parsed", file=sys.stderr)
         return 1
+
+    dry_run = "--dry-run" in argv
+    as_json = "--json" in argv
+
+    if "--audit" in argv:
+        return cmd_audit(sections, absent)
+    if "--status" in argv:
+        return cmd_status(sections, as_json)
+    if "--restore" in argv:
+        return cmd_restore(sections)
+    if "--enable-all" in argv or "--disable-all" in argv:
+        refresh_state(sections)
+        want_enabled = "--enable-all" in argv
+        for sec in sections:
+            for it in sec.items:
+                it.selected = want_enabled
+        return run_apply(sections, dry_run)
+
     print(source_note)
-    print("priming sudo...")
-    if not prime_sudo():
-        print("sudo required to read launchd state", file=sys.stderr)
-        return 1
+    if absent:
+        print(f"skipped {len(absent)} labels not present on this macOS build "
+              f"(see `debloat --audit`)")
     refresh_state(sections)
     result = curses.wrapper(run_tui, sections)
     if result:
