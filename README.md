@@ -4,7 +4,7 @@
 
 Interactive console util to disable 269 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
 
-**No SIP disable required** — works with System Integrity Protection fully on. It validates every service against your actual system at launch, so it never acts on a label that doesn't exist on your macOS build.
+**No SIP disable required** — works with System Integrity Protection fully on, via Apple's supported `launchctl disable`. That covers ~90-95% of the bloat with zero security tradeoff; squeezing the last few daemons means turning SIP off permanently, which isn't worth it for most people. It also validates every service against your actual system at launch, so it never acts on a label that doesn't exist on your macOS build.
 
 ```bash
 npx -y @oleksandr_krupko/mac-os-debloat
