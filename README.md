@@ -6,14 +6,26 @@ Interactive console util to disable 269 non-essential macOS launchd services. Re
 
 **No SIP disable required** — works with System Integrity Protection fully on, via Apple's supported `launchctl disable`. That covers ~90-95% of the bloat with zero security tradeoff; squeezing the last few daemons means turning SIP off permanently, which isn't worth it for most people. It also validates every service against your actual system at launch, so it never acts on a label that doesn't exist on your macOS build.
 
+## Requirements
+
+- macOS Tahoe 26.x, Apple Silicon
+- Python 3.10+ — ships with Xcode Command Line Tools. If `python3` isn't
+  found, run `xcode-select --install` first (macOS will prompt with a GUI
+  installer on first launch).
+- No SIP disable required for the default label set.
+
 ```bash
 npx -y @oleksandr_krupko/mac-os-debloat
 ```
 
-Or via curl:
+Or via curl — download it first, then run it (see
+[Troubleshooting](#troubleshooting) for why not to pipe straight into
+`python3`):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/debloat | python3
+curl -fsSL https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/debloat -o debloat
+chmod +x debloat
+python3 debloat
 ```
 
 Or via Homebrew:
@@ -124,6 +136,31 @@ Uses `launchctl disable` — writes to `/var/db/com.apple.xpc.launchd/disabled.p
 - Wiped by macOS major upgrades (26.3 → 26.4 etc) — re-run after upgrade
 - `system/` disables affect all users · `gui/$UID` disables only current user
 - Multi-user: run once per account
+
+</details>
+
+<a id="troubleshooting"></a>
+<details>
+<summary><b>Troubleshooting</b></summary>
+
+**`curl ... | python3` hangs, spins, or keys don't respond**
+Piping directly into `python3` sends the script's own source over stdin, so
+by the time the TUI starts, stdin is no longer attached to your keyboard —
+the input loop free-spins and repeatedly calls `mdutil` for the status line,
+pegging a CPU core. Download the script to a file and run the file instead
+(see install instructions above). v0.5.1+ detects this and exits with a
+clear message instead of hanging.
+
+**`Boot-out failed: 150: Operation not permitted while SIP is engaged`**
+(e.g. on `com.apple.followupd`)
+Expected for a handful of daemons Apple protects even from a live
+`bootout`. This is *not* something you need to disable SIP to fix:
+`launchctl disable` — the persistent, SIP-safe half of the operation —
+already succeeded and takes effect on your next login/reboot. The failed
+`bootout` only means that one process couldn't be killed *immediately*; run
+`debloat --status` after a reboot to confirm it's disabled. Disabling SIP
+permanently isn't necessary and isn't recommended by this project — see the
+comparison table below.
 
 </details>
 

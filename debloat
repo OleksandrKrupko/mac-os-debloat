@@ -1030,7 +1030,7 @@ def load_sections() -> tuple[list[Section], str, list[str]]:
     return sections, note, absent
 
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 
 HELP = f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services.
 
@@ -1091,6 +1091,21 @@ def main() -> int:
     if absent:
         print(f"skipped {len(absent)} labels not present on this macOS build "
               f"(see `debloat --audit`)")
+
+    if not sys.stdin.isatty():
+        print(
+            "error: stdin isn't a terminal, so the interactive TUI can't "
+            "read keypresses. This usually means the script was run via "
+            "`curl ... | python3`.\n\n"
+            "Download it first, then run the file directly:\n\n"
+            "  curl -fsSL https://raw.githubusercontent.com/OleksandrKrupko/"
+            "mac-os-debloat/main/debloat -o debloat\n"
+            "  chmod +x debloat\n"
+            "  python3 debloat\n",
+            file=sys.stderr,
+        )
+        return 1
+
     refresh_state(sections)
     result = curses.wrapper(run_tui, sections)
     if result:
