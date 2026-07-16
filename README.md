@@ -22,6 +22,8 @@ Or via Homebrew:
 brew install OleksandrKrupko/debloat/debloat && debloat
 ```
 
+All three methods need `python3` — preinstalled with the Xcode Command Line Tools (`xcode-select --install` if it's missing). No SIP disable required. The curl one-liner pipes the script to `python3`, so it reopens `/dev/tty` for the interactive keys; if you have no terminal attached, use the non-interactive flags below or the `npx` launcher.
+
 ## Commands
 
 Runs the interactive TUI by default. Non-interactive flags for scripting and quick recovery:

@@ -648,6 +648,22 @@ def apply_changes(sections: list[Section]) -> dict:
     }
 
 
+def reopen_tty_stdin() -> bool:
+    """`curl ... | python3` feeds the script on stdin, leaving fd 0 as a spent
+    pipe rather than a terminal. curses then busy-loops on getch (ERR, spawning
+    mdutil every frame) or fails cbreak outright. Point fd 0 at the controlling
+    terminal so the TUI reads real keystrokes."""
+    if sys.stdin.isatty():
+        return True
+    try:
+        tty = open("/dev/tty")
+    except OSError:
+        return False
+    os.dup2(tty.fileno(), 0)
+    sys.stdin = tty
+    return True
+
+
 def prime_sudo() -> bool:
     result = subprocess.run(["sudo", "-v"], check=False)
     return result.returncode == 0
@@ -1030,7 +1046,7 @@ def load_sections() -> tuple[list[Section], str, list[str]]:
     return sections, note, absent
 
 
-VERSION = "0.5.0"
+VERSION = "0.5.1"
 
 HELP = f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services.
 
@@ -1091,6 +1107,14 @@ def main() -> int:
     if absent:
         print(f"skipped {len(absent)} labels not present on this macOS build "
               f"(see `debloat --audit`)")
+    if not reopen_tty_stdin():
+        print("the interactive TUI needs a terminal on stdin, but none is "
+              "attached.\nUse the npx launcher, or download then run:\n"
+              "  curl -fsSL https://raw.githubusercontent.com/OleksandrKrupko/"
+              "mac-os-debloat/main/debloat -o /tmp/debloat && python3 /tmp/debloat\n"
+              "Non-interactive flags (--status, --disable-all, ...) work over a "
+              "pipe.", file=sys.stderr)
+        return 1
     refresh_state(sections)
     result = curses.wrapper(run_tui, sections)
     if result:
