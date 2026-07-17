@@ -130,6 +130,14 @@ Uses `launchctl disable` — writes to `/var/db/com.apple.xpc.launchd/disabled.p
 </details>
 
 <details>
+<summary><b>Troubleshooting</b></summary>
+
+**`Boot-out failed: 150: Operation not permitted while System Integrity Protection is engaged`** (e.g. on `com.apple.followupd`)
+Expected for a handful of daemons Apple protects even from a live `bootout`, and not a reason to disable SIP. The persistent half — `launchctl disable` — already succeeded and takes effect on your next login/reboot; the failed `bootout` only means that one running process couldn't be killed immediately. Run `debloat --status` after a reboot to confirm it's disabled.
+
+</details>
+
+<details>
 <summary><b>Customizing</b></summary>
 
 Drop a `labels.txt` next to the script — it overrides embedded list.
