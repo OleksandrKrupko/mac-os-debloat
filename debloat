@@ -382,6 +382,7 @@ com.apple.translationd                        # Apple Translate API (Translate a
 com.apple.notes.exchangenotesd                # Apple Notes Exchange sync
 com.apple.VoiceOver                           # screen reader (no accessibility use)
 com.apple.accessibility.LiveTranscriptionAgent  # live transcription/captions
+com.apple.accessibility.axassetsd              # TTS voice + VoiceOver/Magnifier model asset downloads
 com.apple.DictationIM                         # dictation input method
 com.apple.voicebankingd                       # custom voice creation (Live Speech)
 com.apple.voicememod                          # Voice Memos app
@@ -1046,7 +1047,7 @@ def load_sections() -> tuple[list[Section], str, list[str]]:
     return sections, note, absent
 
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 
 HELP = f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services.
 

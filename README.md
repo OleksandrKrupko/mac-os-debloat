@@ -2,7 +2,7 @@
 
 **Debloat your Mac from the terminal. Zero dependencies. Zero install.**
 
-Interactive console util to disable 269 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
+Interactive console util to disable 270 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
 
 **No SIP disable required** — works with System Integrity Protection fully on, via Apple's supported `launchctl disable`. That covers ~90-95% of the bloat with zero security tradeoff; squeezing the last few daemons means turning SIP off permanently, which isn't worth it for most people. It also validates every service against your actual system at launch, so it never acts on a label that doesn't exist on your macOS build.
 
@@ -71,7 +71,7 @@ pending: 4   (spotlight: ON)   (checked = enabled/running)
 <details>
 <summary><b>What it disables</b></summary>
 
-269 labels across 69 sections. Highlights:
+270 labels across 69 sections. Highlights:
 
 - Siri / voice assistant (12)
 - Apple Intelligence — Tahoe (10), incl. `contextstored` (known >30 GB memory leak) and `privatecloudcomputed`
@@ -180,7 +180,7 @@ The ~1.5-2 GB figure is the drop in used memory on an idle M4 MacBook Pro 16 GB 
 
 | Tool | Console UI | Curated list | Persistent | No SIP disable | Zero install |
 |------|-----------|--------------|------------|----------------|--------------|
-| **mac-os-debloat** | ✓ | ✓ 269 labels | ✓ | ✓ | ✓ Python stdlib |
+| **mac-os-debloat** | ✓ | ✓ 270 labels | ✓ | ✓ | ✓ Python stdlib |
 | [launchtui](https://github.com/macournoyer/launchtui) | ✓ | ✗ generic | ✗ bootout only | ✓ | ✗ `cargo install` |
 | [Silverback-Debloater](https://github.com/Wamphyre/macOS_Silverback-Debloater) | ✗ | ✓ | ✓ | ✓ | ✗ Intel-desktop only |
 | [b0gdanw Tahoe gist](https://gist.github.com/b0gdanw/0c20c2fd5d0a7e6cff01849b57108967) | ✗ | ✓ | ✓ | ✗ needs SIP off | gist copy |
