@@ -29,17 +29,61 @@ All three methods need `python3` — preinstalled with the Xcode Command Line To
 Runs the interactive TUI by default. Non-interactive flags for scripting and quick recovery:
 
 ```bash
-debloat                 # interactive TUI (default)
-debloat --status        # disabled/enabled counts, spotlight, reclaimable RAM
-debloat --audit         # list any embedded labels not present on your macOS build
-debloat --disable-all   # disable every non-essential service (prompts sudo)
-debloat --enable-all    # re-enable everything — the panic button
-debloat --restore       # revert to the state before your last apply
-debloat --dry-run       # with --disable-all/--enable-all: preview, apply nothing
-debloat --status --json # machine-readable status
+debloat                    # interactive TUI (default)
+debloat --preset telemetry # disable analytics, crash reports, ads, beta enrollment (46)
+debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (172)
+debloat --list             # print every label, in preset file format
+debloat --status           # disabled/enabled counts, spotlight, reclaimable RAM
+debloat --audit            # list any embedded labels not present on your macOS build
+debloat --disable-all      # disable every label, no exceptions (prompts sudo)
+debloat --enable-all       # re-enable everything — the panic button
+debloat --restore          # revert to the state before your last apply
+debloat --dry-run          # with --preset/--disable-all/--enable-all: preview only
+debloat --status --json    # machine-readable status
 ```
 
-`--status`, `--audit`, and `--dry-run` need no sudo — reading launchd state is unprivileged. Every apply first snapshots your current state to `~/.mac-os-debloat/latest.json`, so `--restore` always brings you back. If anything feels off, `debloat --enable-all` turns it all back on.
+`--status`, `--audit`, `--list`, and `--dry-run` need no sudo — reading launchd state is unprivileged. Every apply first snapshots your current state to `~/.mac-os-debloat/latest.json`, so `--restore` always brings you back. If anything feels off, `debloat --enable-all` turns it all back on.
+
+## Presets
+
+Three rungs, safest first. A preset disables its own labels, leaves everything else exactly as it is, and never re-enables anything.
+
+| | disables | what you lose |
+|---|---|---|
+| `--preset telemetry` | 46 | nothing — analytics, crash reports, Apple ads, Biome, beta enrollment |
+| `--preset balanced` | 172 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather, nags |
+| `--disable-all` | 270 | everything, console only — **iCloud login, App Store purchases and macOS Update installs break** |
+
+Counts are before pruning: the tool drops labels that don't exist on your macOS build, so what it prints is a little lower.
+
+Neither preset touches Apple ID auth (`akd`, `appleaccountd`, `adid`, `AppSSODaemon`, `AppSSOAgent`, `identityservicesd`), App Store commerce, FairPlay or bridgeOS — 27 labels. Only `--disable-all` and your own presets can reach those.
+
+98 labels sit between `balanced` and `--disable-all` — Safari, Photos, Music/TV/Books, Maps, Time Machine, Contacts/Calendar/Mail, Game Center, HomeKit, Screen Time, iCloud sync, print. Which of those you want is personal, so there's no preset for it: make your own.
+
+To turn something back on, use the TUI (`space` toggles an item, `enter` applies), `--restore`, or `--enable-all`.
+
+### Make your own preset
+
+```bash
+mkdir -p ~/.mac-os-debloat/presets
+debloat --list > ~/.mac-os-debloat/presets/mine.txt   # every label, or --list --preset balanced
+$EDITOR ~/.mac-os-debloat/presets/mine.txt            # delete the lines for services to keep running
+debloat --preset mine --dry-run                       # check
+debloat --preset mine
+```
+
+A preset file is a plain list of labels. `--list` output is valid input, so it round-trips. Sections and comments are optional and only there to be readable:
+
+```
+# === Your section ===
+com.apple.something                # what it does, what breaks
+```
+
+`--preset NAME` looks for `~/.mac-os-debloat/presets/NAME.txt` first, then the built-in names — so `presets/balanced.txt` replaces the built-in `balanced` with yours.
+
+### Add your own labels
+
+`~/.mac-os-debloat/labels.txt` is appended to the built-in list, in the same format. Labels there show up in the TUI, `--list` and `--disable-all`. They are not in the built-in presets — put them in your own preset for that.
 
 ## Screenshot
 
@@ -135,17 +179,14 @@ Uses `launchctl disable` — writes to `/var/db/com.apple.xpc.launchd/disabled.p
 **`Boot-out failed: 150: Operation not permitted while System Integrity Protection is engaged`** (e.g. on `com.apple.followupd`)
 Expected for a handful of daemons Apple protects even from a live `bootout`, and not a reason to disable SIP. The persistent half — `launchctl disable` — already succeeded and takes effect on your next login/reboot; the failed `bootout` only means that one running process couldn't be killed immediately. Run `debloat --status` after a reboot to confirm it's disabled.
 
-</details>
+**iCloud / App Store operations time out on UDP 443, looking exactly like a VPN or firewall block**
+They aren't. The local daemon the request is handed to (`identityservicesd`, `appstoreagent`, `akd`, …) isn't running to answer it, so the request never leaves. Check `debloat --status` before touching network settings. Only reachable via `--disable-all` or your own preset — no built-in preset disables those.
 
-<details>
-<summary><b>Customizing</b></summary>
+**macOS Update finds and downloads an update, then never installs it — no error, no dialog**
+`bridgeOSUpdateProxy` / `bosreporter` / `boswatcher` are required for macOS Update installs on Apple Silicon too, not only Intel T2. No preset disables them; only `--disable-all` does. Turn them back on in the TUI, or with `--restore` / `--enable-all`. Reported on macOS 26.6 by [#7](https://github.com/OleksandrKrupko/mac-os-debloat/issues/7); not reproduced here.
 
-Drop a `labels.txt` next to the script — it overrides embedded list.
-
-```
-# === Your section ===
-com.apple.something                # what it does, what breaks
-```
+**`AKAnisetteError Code=-8025` on iCloud sign-in after disabling Siri**
+Reported on Tahoe: `com.apple.Siri.agent` provides Mach services the sign-in dialog consults even with Siri off. `--preset balanced` disables it. If you hit this, re-enable `com.apple.Siri.agent` from the TUI. Reported in [#7](https://github.com/OleksandrKrupko/mac-os-debloat/issues/7); not reproduced here.
 
 </details>
 

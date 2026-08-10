@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Interactive console util to toggle macOS launchd services on/off.
 
-Reads labels.txt, shows current disabled state, lets you flip checkboxes,
-applies diff with sudo on Enter. Persistent across reboot.
+Shows current disabled state, lets you flip checkboxes, applies diff with sudo
+on Enter. Persistent across reboot.
 
 Keys:
   ↑/↓ or j/k   navigate
@@ -45,7 +45,7 @@ EMBEDDED_LABELS = """\
 # Format: label  # comment (what breaks if disabled)
 # Lines starting with `# ===` are section headers.
 
-# === Siri / voice assistant ===
+# === Siri / voice assistant [balanced] ===
 com.apple.assistantd                          # Siri core
 com.apple.Siri.agent                          # Siri agent
 com.apple.SiriTTSTrainingAgent                # Siri voice training
@@ -59,7 +59,7 @@ com.apple.intelligencecontextd                # Apple Intelligence context runti
 com.apple.intelligenceplatformd               # Apple Intelligence platform
 com.apple.knowledge-agent                     # knowledge graph extraction
 
-# === Apple Intelligence (Tahoe) ===
+# === Apple Intelligence (Tahoe) [balanced] ===
 com.apple.mlruntimed                          # ML runtime
 com.apple.generativeexperiencesd              # Writing Tools / generative AI
 com.apple.privatecloudcomputed                # Private Cloud Compute (AI cloud offload)
@@ -71,23 +71,22 @@ com.apple.textunderstandingd                  # text understanding AI
 com.apple.triald                              # Siri experiments (known CPU hog)
 com.apple.contextstored                       # context store (KNOWN >30GB MEMORY LEAK in Tahoe)
 
-# === Telemetry / analytics ===
+# === Telemetry / analytics [telemetry] ===
 com.apple.analyticsd                          # Apple diagnostics submission
 com.apple.tipsd                               # Tips app notifications
 
-# === AirDrop / Continuity (no iPhone) ===
+# === AirDrop / Continuity (no iPhone) [balanced] ===
 com.apple.rapportd                            # device proximity / Continuity discovery
 
-# === Diagnostics / crash reports ===
+# === Diagnostics / crash reports [telemetry] ===
 com.apple.ReportCrash                         # auto crash report generator
 com.apple.spindump                            # hang detection / spin reports
 
-# === Apple ads ===
+# === Apple ads [telemetry] ===
 com.apple.ap.adprivacyd                       # ad privacy
-com.apple.adid                                # ad identifier daemon
 com.apple.ap.promotedcontentd                 # promoted apps
 
-# === Proactive / predictive ===
+# === Proactive / predictive [balanced] ===
 com.apple.coreduetd                           # activity tracker for proactive features
 com.apple.duetexpertd                         # prediction engine
 com.apple.suggestd                            # Spotlight smart suggestions backend
@@ -103,20 +102,19 @@ com.apple.AirPlayXPCHelper                    # AirPlay helper
 com.apple.photoanalysisd                      # face/scene/object scan in Photos
 com.apple.mediaanalysisd                      # media library indexing
 
-# === News / Stocks / Weather ===
+# === News / Stocks / Weather [balanced] ===
 com.apple.weatherd                            # weather data daemon (menu bar / widgets)
 com.apple.newsd                               # News app daemon
 
-# === Apple ID nags / Family ===
+# === Apple ID nags / Family [balanced] ===
 com.apple.familycircled                       # Family Sharing
 com.apple.followupd                           # Apple ID setup nags
 
-# === Misc ===
+# === Misc [balanced] ===
 com.apple.helpd                               # Help viewer indexer
 
-# === iMessage / FaceTime / phone relay (no iPhone) ===
+# === iMessage / FaceTime / phone relay (no iPhone) [balanced] ===
 com.apple.imagent                             # iMessage agent
-com.apple.identityservicesd                   # Apple ID identity (iMessage/FaceTime)
 com.apple.telephonyutilities.callservicesd    # phone call relay from iPhone
 com.apple.imautomatichistorydeletionagent     # iMessage history cleanup
 com.apple.imcore.imtransferagent              # iMessage attachments
@@ -138,29 +136,27 @@ com.apple.calaccessd                          # Calendar backend
 com.apple.remindd                             # Reminders
 com.apple.dataaccess.dataaccessd              # Exchange/CardDAV/CalDAV sync
 
-# === Speech / dictation ===
+# === Speech / dictation [balanced] ===
 com.apple.speech.speechsynthesisd.arm64       # text-to-speech
 com.apple.speech.speechdatainstallerd         # voice data installer
 
-# === Wallpaper / thumbnails ===
+# === Wallpaper / thumbnails [balanced] ===
 com.apple.quicklook.ThumbnailsAgent           # QuickLook thumbnails in Finder
 
-# === App Store + update nags (keeps softwareupdated for security) ===
-com.apple.appstoreagent                       # App Store agent
+# === App Store + update nags (keeps softwareupdated for security) [balanced] ===
 com.apple.SoftwareUpdateNotificationManager   # update nag popups
 com.apple.amsengagementd                      # Apple Media Services engagement
 
-# === Misc dead weight ===
+# === Misc dead weight [balanced] ===
 com.apple.studentd                            # Schoolwork app
 com.apple.linkd                               # Universal Links (iOS-style deep links)
-com.apple.AppSSOAgent                         # Apple SSO extensions
 com.apple.liveactivitiesd                     # Live Activities widgets
 
 # === iCloud (no iCloud use) ===
 com.apple.cloudd                              # iCloud sync core
 com.apple.cloudphotod                         # iCloud Photos sync
 
-# === Location/prediction extras (Find My still intact) ===
+# === Location/prediction extras (Find My still intact) [balanced] ===
 com.apple.routined                            # significant locations / location-aware reminders
 com.apple.homeenergyd                         # Home Energy widget
 
@@ -176,16 +172,14 @@ com.apple.ManagedSettingsAgent                # Screen Time app limits
 com.apple.UsageTrackingAgent                  # device usage tracking (Screen Time data)
 com.apple.StatusKitAgent                      # share Focus status (iMessage)
 
-# === Apple Media Services / iPhone telephony / contacts ===
-com.apple.amsaccountsd                        # Apple Media Services account state
-com.apple.amsondevicestoraged                 # App Store on-device storage scan
+# === Apple Media Services / iPhone telephony / contacts [balanced] ===
 com.apple.CommCenter                          # iPhone cellular call relay (no iPhone)
 com.apple.contacts.postersyncd                # Contacts profile picture sync
 
-# === More AI/ML stragglers ===
+# === More AI/ML stragglers [balanced] ===
 com.apple.mlhostd                             # ML host daemon
 
-# === Cosmetic / app daemons ===
+# === Cosmetic / app daemons [balanced] ===
 com.apple.powerchime                          # laptop charging chime sound
 com.apple.talagent                            # app relaunch / window restore at login
 com.apple.shazamd                             # Shazam music recognition (Control Center)
@@ -195,7 +189,7 @@ com.apple.Safari.SafeBrowsing.Service         # Safari Safe Browsing list update
 com.apple.SafariBookmarksSyncAgent            # Safari bookmarks iCloud sync
 com.apple.SafariLaunchAgent                   # Safari startup agent
 
-# === More AI / Apple Intelligence ===
+# === More AI / Apple Intelligence [balanced] ===
 com.apple.siriactionsd                        # Siri Shortcuts/Voice Shortcuts agent
 com.apple.ContextStoreAgent                   # CoreDuet ContextStoreAgent
 com.apple.corespeechd                         # Core Speech backbone (Siri/dictation)
@@ -222,6 +216,9 @@ com.apple.appleaccountd                       # Apple ID account daemon
 com.apple.passd                               # Wallet / Apple Pay
 com.apple.AppSSODaemon                        # Apple SSO Daemon
 com.apple.financed                            # Wallet / Apple Card finance data
+com.apple.adid                                # Apple Device Identity (CoreADI) — iCloud auth, not ads
+com.apple.identityservicesd                   # Apple ID identity (iMessage/FaceTime)
+com.apple.AppSSOAgent                         # Apple SSO extensions
 
 # === App Store full kill (re-enable when needed) ===
 com.apple.appstored                           # App Store daemon
@@ -235,8 +232,11 @@ com.apple.storelegacy                         # legacy iTunes Store
 com.apple.storereceiptinstaller               # app receipt installer
 com.apple.storeuid                            # App Store UI daemon
 com.apple.appplaceholdersyncd                 # app placeholder sync
+com.apple.appstoreagent                       # App Store agent
+com.apple.amsaccountsd                        # Apple Media Services account state
+com.apple.amsondevicestoraged                 # App Store on-device storage scan
 
-# === iCloud user-facing notifications ===
+# === iCloud user-facing notifications [balanced] ===
 com.apple.iCloudNotificationAgent             # iCloud notification UI
 com.apple.iCloudUserNotificationsd            # iCloud user notifications
 com.apple.icloudmailagent                     # iCloud Mail (no Apple Mail)
@@ -246,7 +246,7 @@ com.apple.FollowUpUI                          # Apple ID nag UI
 com.apple.bookassetd                          # Apple Books asset downloads
 com.apple.bookdatastored                      # Apple Books data store
 
-# === Telemetry extras ===
+# === Telemetry extras [telemetry] ===
 com.apple.geoanalyticsd                       # Geo telemetry
 com.apple.SubmitDiagInfo                      # diagnostic submitter to Apple
 com.apple.BiomeAgent                          # biome event hub agent
@@ -256,7 +256,7 @@ com.apple.biomed                              # biome event hub daemon
 com.apple.contacts.donation-agent             # Contacts → Siri Suggestions feed
 com.apple.photolibraryd                       # Photos library daemon
 
-# === Filesystem / cosmetic ===
+# === Filesystem / cosmetic [balanced] ===
 com.apple.filesystems.fskitd                  # File System Kit core (3rd-party FS plugins)
 com.apple.fskit.fskit_agent                   # FSKit agent
 com.apple.fskit.fskit_helper                  # FSKit helper
@@ -273,7 +273,7 @@ com.apple.Maps.mapspushd                      # Apple Maps push
 com.apple.maps.destinationd                   # Apple Maps destinations
 com.apple.intelligentroutingd                 # intelligent routing (Maps)
 
-# === Beta program enrollment (not on macOS beta) ===
+# === Beta program enrollment (not on macOS beta) [telemetry] ===
 com.apple.appleseed.fbahelperd                # AppleSeed feedback assistant helper
 com.apple.appleseed.seedusaged                # AppleSeed usage telemetry
 com.apple.appleseed.seedusaged.postinstall    # AppleSeed postinstall
@@ -288,16 +288,15 @@ com.apple.GamePolicyAgent                     # game policy agent
 com.apple.gamepolicyd                         # game policy daemon
 com.apple.gamesaved                           # game saves
 
-# === Sidecar / iPad second display (no iPad) ===
+# === Sidecar / iPad second display (no iPad) [balanced] ===
 com.apple.sidecar-display-agent               # Sidecar display agent
 com.apple.sidecar-relay                       # Sidecar relay
 
-# === Continuity Capture (no iPhone webcam) ===
+# === Continuity Capture (no iPhone webcam) [balanced] ===
 com.apple.cmio.ContinuityCaptureAgent         # iPhone as webcam agent
 com.apple.companiond                          # Apple Watch / iPhone companion
-com.apple.boswatcher                          # BoardOS accessory watcher
 
-# === Avatar / Memoji / Stickers (no iMessage) ===
+# === Avatar / Memoji / Stickers (no iMessage) [balanced] ===
 com.apple.avatarsd                            # Memoji / avatars
 com.apple.stickersd                           # iMessage stickers
 
@@ -307,7 +306,7 @@ com.apple.Safari.PasswordBreachAgent          # password leak checker (needs iCl
 com.apple.SafariHistoryServiceAgent           # Safari history XPC
 com.apple.SafariNotificationAgent             # Safari web notifications
 
-# === Family / Parental controls (no family setup) ===
+# === Family / Parental controls (no family setup) [balanced] ===
 com.apple.familycontrols                      # family controls daemon
 com.apple.familycontrols.useragent            # family controls user agent
 com.apple.FamilyControlsAgent                 # family controls agent
@@ -317,23 +316,23 @@ com.apple.askpermissiond                      # family purchase approval (Ask to
 com.apple.assessmentagent                     # education assessment mode
 com.apple.progressd                           # ClassKit education progress
 
-# === Proactive / Siri-adjacent (no Siri) ===
+# === Proactive / Siri-adjacent (no Siri) [balanced] ===
 com.apple.proactived                          # proactive engine
 com.apple.proactiveeventtrackerd              # proactive event tracker
 com.apple.knowledgeconstructiond              # knowledge graph construction
 com.apple.reversetemplated                    # reverse template AI
 
-# === AirPlay sender UI ===
+# === AirPlay sender UI [balanced] ===
 com.apple.AirPlayUIAgent                      # AirPlay sender UI (sending to Apple TV)
 
-# === Sports / News extras ===
+# === Sports / News extras [balanced] ===
 com.apple.sportsd                             # Apple Sports data
 
 # === Apple FairPlay DRM (no DRM-protected Apple content) ===
 com.apple.fairplayd                           # FairPlay DRM
 com.apple.fairplaydeviceidentityd             # FairPlay device identity
 
-# === Diagnostics extras (all telemetry to Apple) ===
+# === Diagnostics extras (all telemetry to Apple) [telemetry] ===
 com.apple.diagnosticd                         # diagnostics
 com.apple.diagnosticextensionsd               # diagnostic extensions
 com.apple.diagnostics_agent                   # diagnostics agent
@@ -365,10 +364,10 @@ com.apple.powerlogHelperd                     # battery usage logging (Settings 
 com.apple.signpost.signpost_reporter          # signpost perf telemetry
 com.apple.enhancedloggingd                    # MDM enhanced logging
 
-# === Software update extras (keep softwareupdated + swcd) ===
+# === Software update extras (keep softwareupdated + swcd) [balanced] ===
 com.apple.softwareupdate_firstrun_tasks       # one-shot first-boot SU tasks
 
-# === Misc Apple legacy / unused ===
+# === Misc Apple legacy / unused [balanced] ===
 com.apple.AOSPushRelay                        # legacy iCloud push relay
 com.apple.nfcd                                # NFC daemon (no Apple Pay)
 com.apple.facetimemessagestored               # FaceTime message store
@@ -377,7 +376,7 @@ com.apple.calendar.CalendarAgentBookmarkMigrationService  # one-shot Cal bookmar
 # === Apple ID auth (kill — re-enable when needed for App Store) ===
 com.apple.akd                                 # AuthKit (Apple ID) — re-enable when logging into App Store
 
-# === Apple Translate / Notes / VoiceOver / accessibility extras ===
+# === Apple Translate / Notes / VoiceOver / accessibility extras [balanced] ===
 com.apple.translationd                        # Apple Translate API (Translate app, Safari translate)
 com.apple.notes.exchangenotesd                # Apple Notes Exchange sync
 com.apple.VoiceOver                           # screen reader (no accessibility use)
@@ -392,7 +391,7 @@ com.apple.cloudsettingssyncagent              # iCloud settings sync
 com.apple.languageassetd                      # Apple language model assets (Siri/dictation/translate)
 com.apple.erasecontentsettingshelperd         # Erase All Content (only used for factory reset)
 
-# === Apple TV watchlist / social / WiFi telemetry ===
+# === Apple TV watchlist / social / WiFi telemetry [balanced] ===
 com.apple.watchlistd                          # Apple TV+ watchlist
 com.apple.sociallayerd                        # Game Center social layer
 com.apple.wifianalyticsd                      # WiFi telemetry
@@ -400,13 +399,14 @@ com.apple.wifianalyticsd                      # WiFi telemetry
 # === T2 / bridgeOS (Apple Silicon doesn't use bridgeOS) ===
 com.apple.bridgeOSUpdateProxy                 # bridgeOS update proxy (T2 Intel only)
 com.apple.bosreporter                         # bridgeOS install reporting
+com.apple.boswatcher                          # BoardOS accessory watcher
 
 # === Print (no printer) ===
 com.apple.printtool.agent                     # print tool agent
 com.apple.printtool.daemon                    # print tool daemon
 com.apple.printuitool.agent                   # print UI tool agent
 
-# === Xcode / iOS dev stack (FE/BE dev, no mobile) ===
+# === Xcode / iOS dev stack (FE/BE dev, no mobile) [balanced] ===
 com.apple.previewsd                           # Xcode SwiftUI previews
 com.apple.dt.AutomationModeUI                 # Xcode automation UI
 com.apple.dt.automationmode-writer            # Xcode automation writer
@@ -421,14 +421,14 @@ com.apple.AMPSystemPlayerAgent                # system music player agent
 # === Apple TV+ / video subscriptions ===
 com.apple.videosubscriptionsd                 # Apple TV+ subscriptions
 
-# === Touch Bar (M4 has none) ===
+# === Touch Bar (M4 has none) [balanced] ===
 com.apple.nowplayingtouchui                   # Touch Bar now-playing UI
 com.apple.touchbarserver                      # Touch Bar server
 com.apple.controlstrip                        # Touch Bar control strip
 com.apple.SpacesTouchBarAgent.app             # Touch Bar Spaces agent
 com.apple.accessibility.dfrhud                # Touch Bar accessibility HUD
 
-# === Continuity Data Protocol (no iPhone) ===
+# === Continuity Data Protocol (no iPhone) [balanced] ===
 com.apple.cdpd                                # Continuity Data Protocol
 
 # === Safari Web Inspector / WebKit push (no Safari) ===
@@ -443,19 +443,24 @@ com.apple.bird                                # iCloud Drive sync daemon
 com.apple.security.keychain-circle-notification  # iCloud Keychain notification
 com.apple.syncdefaultsd                       # iCloud synced defaults (app prefs)
 
-# === MDM / Managed apps (no MDM enrollment) ===
+# === MDM / Managed apps (no MDM enrollment) [balanced] ===
 com.apple.managedappdistributionagent         # managed app distribution agent
 com.apple.managedappdistributiond             # managed app distribution daemon
 
-# === Migration / setup leftover ===
+# === Migration / setup leftover [balanced] ===
 com.apple.milod                               # Migration assistant daemon
 
 # === extra Time Machine replicator label ===
 com.apple.replicatord                         # Time Machine replicator (alt label)
 """
 
-_SCRIPT_FILE = globals().get("__file__")
-LABELS_FILE = Path(_SCRIPT_FILE).parent / "labels.txt" if _SCRIPT_FILE else None
+USER_LABELS_FILE = BACKUP_DIR / "labels.txt"
+PRESETS_DIR = BACKUP_DIR / "presets"
+
+BUILTIN_PRESETS = {
+    "telemetry": ("telemetry",),
+    "balanced": ("telemetry", "balanced"),
+}
 
 
 @dataclass
@@ -470,6 +475,7 @@ class Item:
 @dataclass
 class Section:
     title: str
+    preset: str = ""
     items: list[Item] = field(default_factory=list)
 
 
@@ -485,7 +491,11 @@ def parse_labels(source: Path | str) -> list[Section]:
         if m:
             if current.items:
                 sections.append(current)
-            current = Section(title=m.group(1))
+            title = m.group(1)
+            tag = re.search(r"\s*\[(\w+)\]$", title)
+            tagged = tag is not None and tag.group(1) in BUILTIN_PRESETS
+            current = Section(title=title[:tag.start()] if tagged else title,
+                              preset=tag.group(1) if tagged else "")
             continue
         if line.lstrip().startswith("#"):
             continue
@@ -1037,17 +1047,75 @@ def cmd_restore(sections: list[Section]) -> int:
 
 
 def load_sections() -> tuple[list[Section], str, list[str]]:
-    if LABELS_FILE and LABELS_FILE.exists():
-        sections = parse_labels(LABELS_FILE)
-        note = f"loaded labels from {LABELS_FILE}"
-    else:
-        sections = parse_labels(EMBEDDED_LABELS)
-        note = "using embedded labels (no labels.txt found)"
+    sections = parse_labels(EMBEDDED_LABELS)
+    note = f"{sum(len(s.items) for s in sections)} embedded labels"
+    if USER_LABELS_FILE.exists():
+        known = {it.label for sec in sections for it in sec.items}
+        added = 0
+        for sec in parse_labels(USER_LABELS_FILE):
+            fresh: list[Item] = []
+            for it in sec.items:
+                if it.label not in known:
+                    known.add(it.label)
+                    fresh.append(it)
+            sec.items = fresh
+            sec.preset = ""
+            if sec.items:
+                sections.append(sec)
+                added += len(sec.items)
+        note += f" + {added} from {USER_LABELS_FILE}"
     absent = drop_absent_labels(sections)
     return sections, note, absent
 
 
-VERSION = "0.5.2"
+def format_labels(sections: list[Section]) -> str:
+    lines: list[str] = []
+    for sec in sections:
+        lines.append(f"# === {sec.title} ===")
+        for it in sec.items:
+            lines.append(f"{it.label.ljust(45)} # {it.comment}" if it.comment else it.label)
+        lines.append("")
+    return "\n".join(lines)
+
+
+def resolve_preset(sections: list[Section], name: str) -> list[Section] | None:
+    path = PRESETS_DIR / f"{name}.txt"
+    if path.exists():
+        return parse_labels(path)
+    tiers = BUILTIN_PRESETS.get(name)
+    if tiers is None:
+        return None
+    return [sec for sec in sections if sec.preset in tiers]
+
+
+def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
+    preset = resolve_preset(sections, name)
+    if preset is None:
+        print(f"unknown preset '{name}'. built-in: "
+              f"{', '.join(BUILTIN_PRESETS)}. custom: {PRESETS_DIR}/<name>.txt",
+              file=sys.stderr)
+        return 1
+    wanted = {it.label for sec in preset for it in sec.items}
+    if not wanted:
+        print(f"preset '{name}' lists no labels", file=sys.stderr)
+        return 1
+    refresh_state(sections)
+    known = {it.label for sec in sections for it in sec.items}
+    unknown = sorted(wanted - known)
+    for sec in sections:
+        for it in sec.items:
+            it.selected = it.label not in wanted and not it.disabled
+    print(f"preset {name}: {len(wanted & known)} labels")
+    sys.stdout.flush()
+    if unknown:
+        print(f"{len(unknown)} not in the catalog, skipped — add them via "
+              f"{USER_LABELS_FILE}:", file=sys.stderr)
+        for label in unknown:
+            print(f"  {label}", file=sys.stderr)
+    return run_apply(sections, dry_run)
+
+
+VERSION = "0.6.0"
 
 HELP = f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services.
 
@@ -1055,15 +1123,37 @@ Runs a live SIP-safe launchctl TUI by default (no SIP disable required).
 
 Usage:
   debloat                 interactive TUI (default)
+  debloat --preset NAME   disable a named set of labels (prompts sudo)
+  debloat --list          print every label, in preset file format
   debloat --status        print disabled/enabled counts, spotlight, free RAM
   debloat --audit         list embedded labels not present on this macOS build
-  debloat --disable-all   disable every non-essential service (prompts sudo)
+  debloat --disable-all   disable every label, no exceptions (prompts sudo)
   debloat --enable-all    re-enable everything — the panic button
   debloat --restore       revert to the state before your last apply
-  debloat --dry-run       with --disable-all/--enable-all: preview, don't apply
+  debloat --dry-run       with --preset/--disable-all/--enable-all: preview only
   debloat --json          with --status: machine-readable output
   debloat -v|--version    print version
   debloat -h|--help       this help
+
+Presets:
+  telemetry   analytics, crash reports, Apple ads, Biome, beta enrollment
+  balanced    telemetry + Siri, Apple Intelligence, iMessage/Continuity, Family
+  custom      {PRESETS_DIR}/NAME.txt
+
+  A preset only disables its own labels; everything else is left as-is, and
+  nothing is ever re-enabled. Counts are before pruning labels absent from
+  your macOS build. --disable-all and --enable-all ignore --preset and take
+  every label, including Apple ID auth, App Store and bridgeOS — that breaks
+  iCloud login, App Store purchases and macOS Update installs.
+
+Your own labels:
+  {USER_LABELS_FILE} is appended to the built-in list.
+
+Make your own preset:
+  mkdir -p {PRESETS_DIR}
+  debloat --list > {PRESETS_DIR}/mine.txt
+  # delete the lines for services you want to keep running, then:
+  debloat --preset mine
 """
 
 
@@ -1090,19 +1180,48 @@ def main() -> int:
     dry_run = "--dry-run" in argv
     as_json = "--json" in argv
 
+    preset_name = ""
+    if "--preset" in argv:
+        i = argv.index("--preset")
+        if i + 1 >= len(argv) or argv[i + 1].startswith("-"):
+            print(f"--preset needs a name: {', '.join(BUILTIN_PRESETS)}, or a "
+                  f"file in {PRESETS_DIR}", file=sys.stderr)
+            return 1
+        preset_name = argv[i + 1]
+
     if "--audit" in argv:
         return cmd_audit(sections, absent)
     if "--status" in argv:
         return cmd_status(sections, as_json)
+    if "--list" in argv:
+        listed = sections
+        if preset_name:
+            preset = resolve_preset(sections, preset_name)
+            if preset is None:
+                print(f"unknown preset '{preset_name}'", file=sys.stderr)
+                return 1
+            if not any(sec.items for sec in preset):
+                print(f"preset '{preset_name}' lists no labels", file=sys.stderr)
+                return 1
+            listed = preset
+        print(format_labels(listed), end="")
+        return 0
     if "--restore" in argv:
         return cmd_restore(sections)
     if "--enable-all" in argv or "--disable-all" in argv:
         refresh_state(sections)
         want_enabled = "--enable-all" in argv
+        if not want_enabled:
+            print("--disable-all takes every label, including Apple ID auth, App "
+                  "Store and bridgeOS: iCloud login, App Store purchases and "
+                  "macOS Update installs will break. `--preset balanced` keeps "
+                  "them.")
         for sec in sections:
             for it in sec.items:
                 it.selected = want_enabled
         return run_apply(sections, dry_run)
+    if preset_name:
+        return cmd_preset(sections, preset_name, dry_run)
 
     print(source_note)
     if absent:
