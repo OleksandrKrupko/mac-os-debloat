@@ -2,7 +2,7 @@
 
 **Debloat your Mac from the terminal. Zero dependencies. Zero install.**
 
-Interactive console util to disable 270 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Persistent across reboot. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon.
+Interactive console util to disable 270 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon. Verify with `debloat --status`, which reports what is actually in effect and how many of the services are running right now — including after a reboot ([see below](#persistence)).
 
 **No SIP disable required** — works with System Integrity Protection fully on, via Apple's supported `launchctl disable`. That covers ~90-95% of the bloat with zero security tradeoff; squeezing the last few daemons means turning SIP off permanently, which isn't worth it for most people. It also validates every service against your actual system at launch, so it never acts on a label that doesn't exist on your macOS build.
 
@@ -33,7 +33,7 @@ debloat                    # interactive TUI (default)
 debloat --preset telemetry # disable analytics, crash reports, ads, beta enrollment (46)
 debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (172)
 debloat --list             # print every label, in preset file format
-debloat --status           # disabled/enabled counts, spotlight, reclaimable RAM
+debloat --status           # per-domain disabled/enabled counts, how many are running, spotlight, RAM
 debloat --audit            # list any embedded labels not present on your macOS build
 debloat --disable-all      # disable every label, no exceptions (prompts sudo)
 debloat --enable-all       # re-enable everything — the panic button
@@ -162,14 +162,18 @@ Full curated list with per-label comments lives inside the script (`EMBEDDED_LAB
 </details>
 
 <details>
+<a name="persistence"></a>
 <summary><b>Persistence</b></summary>
 
-Uses `launchctl disable` — writes to `/var/db/com.apple.xpc.launchd/disabled.plist`.
+Uses `launchctl disable`, which writes an override table per launchd domain: `system` jobs (a `LaunchDaemons` plist) go to `/var/db/com.apple.xpc.launchd/disabled.plist`, `gui/$UID` jobs (a `LaunchAgents` plist) to `disabled.$UID.plist`. **An override only takes effect in the domain the job is actually registered in**, so the tool resolves each label's domains and writes only there.
 
-- Survives reboot
 - Wiped by macOS major upgrades (26.3 → 26.4 etc) — re-run after upgrade
 - `system/` disables affect all users · `gui/$UID` disables only current user
 - Multi-user: run once per account
+
+**Reboot persistence is not guaranteed on macOS 26.x.** Measured on 26.5.2 (25F84) with SIP enabled: after a boot, 264 of the 268 catalog labels had no override in effect in the domain their job runs in, and 104 of them were running. `disabled.plist` held 258 overrides, `disabled.$UID.plist` only 95, and both files had been rewritten one minute after boot. The write itself is fine — `sudo launchctl disable gui/$UID/<agent>` returns 0 and the key appears in `disabled.$UID.plist` immediately — so the overrides are lost after the apply, not during it. The mechanism is not established. Reported in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8).
+
+So don't trust it, check it: `debloat --status` reports the per-domain truth plus how many of the labels are running right now. If that count is non-zero after a reboot, re-apply. Every apply also verifies itself and prints any label whose override did not take effect, rather than reporting success.
 
 </details>
 
@@ -177,7 +181,10 @@ Uses `launchctl disable` — writes to `/var/db/com.apple.xpc.launchd/disabled.p
 <summary><b>Troubleshooting</b></summary>
 
 **`Boot-out failed: 150: Operation not permitted while System Integrity Protection is engaged`** (e.g. on `com.apple.followupd`)
-Expected for a handful of daemons Apple protects even from a live `bootout`, and not a reason to disable SIP. The persistent half — `launchctl disable` — already succeeded and takes effect on your next login/reboot; the failed `bootout` only means that one running process couldn't be killed immediately. Run `debloat --status` after a reboot to confirm it's disabled.
+Expected for daemons Apple protects even from a live `bootout`, and not a reason to disable SIP. `bootout` only kills the running process, and when it fails that process keeps running until it exits on its own — `launchctl disable` stops the *next* launch, it does not stop a live one. The two are separate steps and are now reported separately. An apply prints how many `bootout`s failed and with which message, lists any `disable` that failed outright, and then re-reads launchd to name every label whose override did not end up in effect. Trust that list, not the "N disabled" count.
+
+**`--status` says a service is disabled but it's still running** (pre-0.7.0)
+Up to 0.6.0 `--status` treated a label as disabled if either domain had an override, so an override written to the domain the job doesn't run in read as success. 0.7.0 resolves each label's real domains and requires an override in every one, and prints a live count of catalog services still running. Re-apply after upgrading — the earlier applies may not have taken effect.
 
 **iCloud / App Store operations time out on UDP 443, looking exactly like a VPN or firewall block**
 They aren't. The local daemon the request is handed to (`identityservicesd`, `appstoreagent`, `akd`, …) isn't running to answer it, so the request never leaves. Check `debloat --status` before touching network settings. Only reachable via `--disable-all` or your own preset — no built-in preset disables those.
@@ -210,7 +217,7 @@ These will break the system. Not in default list, but if you add manually:
 
 macOS Tahoe (26.x) baselines at ~4-5 GB RAM and a steady CPU drip from ~50 Apple daemons you mostly don't use — Siri, Apple Intelligence, telemetry, ads, predictions, AirPlay, Photos analysis, etc. On a 16 GB Mac that's a third of your memory gone before any of your own apps start.
 
-This tool kills the ones you don't need, persistently, with a single console util and no install. ~1.5 GB RAM and a few % CPU back for whatever you're actually running — compilers, browsers, VMs, model inference, video editing, games, whatever.
+This tool kills the ones you don't need with a single console util and no install. ~1.5 GB RAM and a few % CPU back for whatever you're actually running — compilers, browsers, VMs, model inference, video editing, games, whatever.
 
 The ~1.5-2 GB figure is the drop in used memory on an idle M4 MacBook Pro 16 GB (macOS 26.3.1) after disabling the full default set and rebooting, compared beforehand. Your number depends on which services you actually run — check `debloat --status` for the reclaimable RAM on your own machine before and after.
 
@@ -221,7 +228,7 @@ The ~1.5-2 GB figure is the drop in used memory on an idle M4 MacBook Pro 16 GB 
 
 | Tool | Console UI | Curated list | Persistent | No SIP disable | Zero install |
 |------|-----------|--------------|------------|----------------|--------------|
-| **mac-os-debloat** | ✓ | ✓ 270 labels | ✓ | ✓ | ✓ Python stdlib |
+| **mac-os-debloat** | ✓ | ✓ 270 labels | `launchctl disable` + verified per domain ([caveat](#persistence)) | ✓ | ✓ Python stdlib |
 | [launchtui](https://github.com/macournoyer/launchtui) | ✓ | ✗ generic | ✗ bootout only | ✓ | ✗ `cargo install` |
 | [Silverback-Debloater](https://github.com/Wamphyre/macOS_Silverback-Debloater) | ✗ | ✓ | ✓ | ✓ | ✗ Intel-desktop only |
 | [b0gdanw Tahoe gist](https://gist.github.com/b0gdanw/0c20c2fd5d0a7e6cff01849b57108967) | ✗ | ✓ | ✓ | ✗ needs SIP off | gist copy |

@@ -2,7 +2,7 @@
 """Interactive console util to toggle macOS launchd services on/off.
 
 Shows current disabled state, lets you flip checkboxes, applies diff with sudo
-on Enter. Persistent across reboot.
+on Enter.
 
 Keys:
   ↑/↓ or j/k   navigate
@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 UID = os.getuid()
+DOMAINS = ("system", f"gui/{UID}")
 BACKUP_DIR = Path.home() / ".mac-os-debloat"
 
 LAUNCHD_DIRS = (
@@ -470,6 +471,7 @@ class Item:
     section: str
     disabled: bool = False
     selected: bool = False
+    domains: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -513,35 +515,59 @@ def parse_labels(source: Path | str) -> list[Section]:
     return sections
 
 
-def installed_plist_labels() -> set[str]:
-    names: set[str] = set()
+def plist_domains() -> dict[str, set[str]]:
+    """label -> launchd domains its job definition lives in. A LaunchAgents
+    plist is a `gui/$UID` job, a LaunchDaemons plist a `system` job."""
+    found: dict[str, set[str]] = {}
     for d in LAUNCHD_DIRS:
+        domain = f"gui/{UID}" if d.endswith("LaunchAgents") else "system"
         for p in glob.glob(d + "/*.plist"):
-            names.add(os.path.basename(p)[:-6])
-    return names
+            found.setdefault(os.path.basename(p)[:-6], set()).add(domain)
+    return found
 
 
-def label_present(label: str, plist_names: set[str]) -> bool:
-    if label in plist_names:
-        return True
-    for domain in ("system", f"gui/{UID}"):
-        r = subprocess.run(["launchctl", "print", f"{domain}/{label}"],
-                           capture_output=True, check=False)
-        if r.returncode == 0:
-            return True
-    return False
+def domain_state(domain: str) -> tuple[set[str], set[str]]:
+    """(labels registered in the domain, labels disabled by an override there).
+    One `launchctl print <domain>` carries both; its `disabled services` block
+    is the same table `print-disabled` shows."""
+    r = subprocess.run(["launchctl", "print", domain],
+                       capture_output=True, text=True, check=False)
+    registered: set[str] = set()
+    disabled: set[str] = set()
+    block = ""
+    for line in r.stdout.splitlines():
+        header = re.match(r"^\t([\w ]+) = \{$", line)
+        if header:
+            block = header.group(1)
+            continue
+        if line.startswith("\t}"):
+            block = ""
+            continue
+        if block == "services":
+            fields = line.split()
+            if fields:
+                registered.add(fields[-1])
+        elif block == "disabled services":
+            entry = re.match(r'\s*"([^"]+)"\s*=>\s*(true|disabled)\s*$', line)
+            if entry:
+                disabled.add(entry.group(1))
+    return registered, disabled
 
 
 def drop_absent_labels(sections: list[Section]) -> list[str]:
-    """Remove labels that don't exist on this macOS build (renamed/removed by
-    Apple, or wrong on this OS). Returns the dropped labels so callers can
-    report them. Prevents phantom entries showing as enabled no-ops."""
-    plist_names = installed_plist_labels()
+    """Record for every label the domains it lives in, and remove the ones this
+    macOS build doesn't have at all (renamed/removed by Apple, or wrong for this
+    OS). Returns the dropped labels so callers can report them. Prevents phantom
+    entries showing as enabled no-ops."""
+    from_plists = plist_domains()
+    registered = {d: domain_state(d)[0] for d in DOMAINS}
     absent: list[str] = []
     for sec in sections:
         keep: list[Item] = []
         for it in sec.items:
-            if label_present(it.label, plist_names):
+            it.domains = set(from_plists.get(it.label, ()))
+            it.domains |= {d for d in DOMAINS if it.label in registered[d]}
+            if it.domains:
                 keep.append(it)
             else:
                 absent.append(it.label)
@@ -550,25 +576,14 @@ def drop_absent_labels(sections: list[Section]) -> list[str]:
     return absent
 
 
-def query_disabled(domain: str) -> set[str]:
-    result = subprocess.run(
-        ["launchctl", "print-disabled", domain],
-        capture_output=True, text=True, check=False,
-    )
-    disabled: set[str] = set()
-    for line in result.stdout.splitlines():
-        m = re.match(r'\s*"([^"]+)"\s*=>\s*(true|disabled)\s*$', line)
-        if m:
-            disabled.add(m.group(1))
-    return disabled
-
-
 def refresh_state(sections: list[Section]) -> None:
-    sys_dis = query_disabled("system")
-    gui_dis = query_disabled(f"gui/{UID}")
+    """An override only takes effect in the domain the job is registered in, so
+    a label counts as disabled only when every domain it lives in overrides it.
+    Unioning the domains instead reports an inert override as success."""
+    disabled = {d: domain_state(d)[1] for d in DOMAINS}
     for sec in sections:
         for it in sec.items:
-            it.disabled = it.label in sys_dis or it.label in gui_dis
+            it.disabled = all(it.label in disabled[d] for d in it.domains)
             it.selected = not it.disabled
 
 
@@ -621,18 +636,31 @@ def pending_changes(sections: list[Section]) -> tuple[list[str], list[str]]:
 
 def apply_changes(sections: list[Section]) -> dict:
     to_disable, to_enable = pending_changes(sections)
+    domains_of = {it.label: it.domains for sec in sections for it in sec.items}
+    override_failures: list[tuple[str, str]] = []
+    bootout_failures: dict[str, int] = {}
 
-    # Phase 1: launchctl disable + bootout (or enable)
+    def launchctl(action: str, domain: str, label: str) -> None:
+        r = subprocess.run(["sudo", "launchctl", action, f"{domain}/{label}"],
+                           capture_output=True, text=True, check=False)
+        if r.returncode == 0:
+            return
+        said = (r.stderr or r.stdout).strip().splitlines()
+        msg = said[-1] if said else f"exit {r.returncode}"
+        if action == "bootout":
+            bootout_failures[msg] = bootout_failures.get(msg, 0) + 1
+        else:
+            override_failures.append((f"{action} {domain}/{label}", msg))
+
+    # Phase 1: launchctl disable + bootout (or enable), only in the domains the
+    # job is registered in — an override written elsewhere never takes effect.
     for label in to_disable:
-        for domain in (f"gui/{UID}", "system"):
-            subprocess.run(["sudo", "launchctl", "disable", f"{domain}/{label}"],
-                           capture_output=True, check=False)
-            subprocess.run(["sudo", "launchctl", "bootout", f"{domain}/{label}"],
-                           capture_output=True, check=False)
+        for domain in sorted(domains_of[label]):
+            launchctl("disable", domain, label)
+            launchctl("bootout", domain, label)
     for label in to_enable:
-        for domain in (f"gui/{UID}", "system"):
-            subprocess.run(["sudo", "launchctl", "enable", f"{domain}/{label}"],
-                           capture_output=True, check=False)
+        for domain in sorted(domains_of[label]):
+            launchctl("enable", domain, label)
 
     # Phase 2: nuclear kill -9 for anything still running after bootout
     killed = 0
@@ -651,12 +679,36 @@ def apply_changes(sections: list[Section]) -> dict:
     if to_disable:
         stragglers = find_pids_for_labels(to_disable)
 
+    disabled_now = {d: domain_state(d)[1] for d in DOMAINS}
     return {
         "disabled": len(to_disable),
         "enabled": len(to_enable),
         "killed": killed,
         "stragglers": stragglers,
+        "override_failures": override_failures,
+        "bootout_failures": bootout_failures,
+        "not_disabled": [l for l in to_disable
+                         if not all(l in disabled_now[d] for d in domains_of[l])],
+        "not_enabled": [l for l in to_enable
+                        if any(l in disabled_now[d] for d in domains_of[l])],
     }
+
+
+def report_apply_problems(result: dict) -> None:
+    for cmd, msg in result["override_failures"]:
+        print(f"  FAILED  launchctl {cmd}: {msg}", file=sys.stderr)
+    for msg, count in sorted(result["bootout_failures"].items(), key=lambda kv: -kv[1]):
+        print(f"  bootout failed on {count} label(s): {msg}", file=sys.stderr)
+    for key, verb in (("not_disabled", "disabled"), ("not_enabled", "enabled")):
+        if result[key]:
+            print(f"⚠ {len(result[key])} labels are NOT {verb} in every domain they "
+                  f"run in — the override did not take effect:", file=sys.stderr)
+            for label in result[key]:
+                print(f"  {label}", file=sys.stderr)
+    if result["stragglers"]:
+        print(f"{len(result['stragglers'])} respawned by launchd:", file=sys.stderr)
+        for label, pids in result["stragglers"].items():
+            print(f"  {label}  pids={pids}", file=sys.stderr)
 
 
 def reopen_tty_stdin() -> bool:
@@ -913,17 +965,16 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             result = apply_changes(sections)
             refresh_state(sections)
             stdscr.clear()
-            straglen = len(result["stragglers"])
             status = (
                 f'applied: {result["disabled"]} disabled, {result["enabled"]} enabled, '
                 f'{result["killed"]} killed'
             )
-            if straglen:
-                status += f"  ⚠ {straglen} respawned (see terminal after quit)"
-                # Print stragglers to stdout for visibility after TUI exits
-                sys.stderr.write(f"\n[debloat] {straglen} stragglers (respawned by launchd):\n")
-                for label, pids in result["stragglers"].items():
-                    sys.stderr.write(f"  {label}  pids={pids}\n")
+            problems = (len(result["override_failures"]) + len(result["not_disabled"])
+                        + len(result["not_enabled"]) + len(result["stragglers"]))
+            if problems:
+                status += f"  ⚠ {problems} problems (see terminal after quit)"
+                sys.stderr.write("\n[debloat] apply problems:\n")
+                report_apply_problems(result)
 
 
 def macos_major() -> int | None:
@@ -986,11 +1037,7 @@ def run_apply(sections: list[Section], dry_run: bool) -> int:
     result = apply_changes(sections)
     print(f'applied: {result["disabled"]} disabled, {result["enabled"]} enabled, '
           f'{result["killed"]} killed')
-    stragglers = result["stragglers"]
-    if stragglers:
-        print(f"{len(stragglers)} respawned by launchd:", file=sys.stderr)
-        for label, pids in stragglers.items():
-            print(f"  {label}  pids={pids}", file=sys.stderr)
+    report_apply_problems(result)
     return 0
 
 
@@ -998,6 +1045,7 @@ def cmd_status(sections: list[Section], as_json: bool) -> int:
     refresh_state(sections)
     disabled = sum(1 for sec in sections for it in sec.items if it.disabled)
     total = sum(len(sec.items) for sec in sections)
+    running = find_pids_for_labels([it.label for sec in sections for it in sec.items])
     spot = spotlight_state()
     free = mem_free_mb()
     if as_json:
@@ -1005,12 +1053,14 @@ def cmd_status(sections: list[Section], as_json: bool) -> int:
             "labels_present": total,
             "disabled": disabled,
             "enabled": total - disabled,
+            "running": sorted(running),
             "spotlight": spot,
             "reclaimable_ram_mb": free,
         }, indent=2))
         return 0
     print(f"labels present on this macOS: {total}")
     print(f"  disabled: {disabled}   enabled: {total - disabled}")
+    print(f"  running now: {len(running)}")
     print(f"spotlight: {spot}")
     if free is not None:
         print(f"reclaimable RAM now: ~{free} MB")
@@ -1115,7 +1165,7 @@ def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
     return run_apply(sections, dry_run)
 
 
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 HELP = f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services.
 
@@ -1125,7 +1175,7 @@ Usage:
   debloat                 interactive TUI (default)
   debloat --preset NAME   disable a named set of labels (prompts sudo)
   debloat --list          print every label, in preset file format
-  debloat --status        print disabled/enabled counts, spotlight, free RAM
+  debloat --status        per-domain disabled/enabled, how many still run, RAM
   debloat --audit         list embedded labels not present on this macOS build
   debloat --disable-all   disable every label, no exceptions (prompts sudo)
   debloat --enable-all    re-enable everything — the panic button
