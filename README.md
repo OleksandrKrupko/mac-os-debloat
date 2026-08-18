@@ -2,9 +2,11 @@
 
 **Debloat your Mac from the terminal. Zero dependencies. Zero install.**
 
-Interactive console util to disable 270 non-essential macOS launchd services. Reclaims ~1.5-2 GB RAM and a chunk of CPU for whatever heavy work you're actually doing. Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon. Verify with `debloat --status`, which reports what is actually in effect and how many of the services are running right now — including after a reboot ([see below](#persistence)).
+Interactive console util to disable 270 non-essential macOS launchd services — Siri, Apple Intelligence, telemetry, ads, and the Apple apps you don't use. Frees ~1.5-2 GB of RAM on a 16 GB M4 ([how that was measured](#why)). Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon. Verify with `debloat --status`, which reports what is actually in effect and how many of the services are running right now — including after a reboot ([see below](#persistence)).
 
-**No SIP disable required** — works with System Integrity Protection fully on, via Apple's supported `launchctl disable`. That covers ~90-95% of the bloat with zero security tradeoff; squeezing the last few daemons means turning SIP off permanently, which isn't worth it for most people. It also validates every service against your actual system at launch, so it never acts on a label that doesn't exist on your macOS build.
+**The desktop is not touched.** Nothing here disables WindowServer, Finder, Dock, Control Center, audio, networking, Wi-Fi, security or your own apps — those labels are not in the catalog at all, at any setting. Even `--disable-all` leaves you with a normal, fully working Mac; what it costs you is listed [below](#presets).
+
+**No SIP disable required** — works with System Integrity Protection fully on, via Apple's supported `launchctl disable`. It also validates every service against your actual system at launch, so it never acts on a label that doesn't exist on your macOS build.
 
 ```bash
 npx -y @oleksandr_krupko/mac-os-debloat
@@ -22,7 +24,9 @@ Or via Homebrew:
 brew install OleksandrKrupko/debloat/debloat && debloat
 ```
 
-All three methods need `python3` — preinstalled with the Xcode Command Line Tools (`xcode-select --install` if it's missing). No SIP disable required. The curl one-liner pipes the script to `python3`, so it reopens `/dev/tty` for the interactive keys; if you have no terminal attached, use the non-interactive flags below or the `npx` launcher.
+All three methods need `python3` — preinstalled with the Xcode Command Line Tools (`xcode-select --install` if it's missing). The curl one-liner pipes the script to `python3`, so it reopens `/dev/tty` for the interactive keys; if you have no terminal attached, use the non-interactive flags below or the `npx` launcher.
+
+![mac-os-debloat TUI — 270 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
 
 ## Commands
 
@@ -33,7 +37,7 @@ debloat                    # interactive TUI (default)
 debloat --preset telemetry # disable analytics, crash reports, ads, beta enrollment (46)
 debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (172)
 debloat --list             # print every label, in preset file format
-debloat --status           # per-domain disabled/enabled counts, how many are running, spotlight, RAM
+debloat --status           # per-domain disabled/enabled counts, how many are running, spotlight, free RAM
 debloat --audit            # list any embedded labels not present on your macOS build
 debloat --disable-all      # disable every label, no exceptions (prompts sudo)
 debloat --enable-all       # re-enable everything — the panic button
@@ -52,7 +56,9 @@ Three rungs, safest first. A preset disables its own labels, leaves everything e
 |---|---|---|
 | `--preset telemetry` | 46 | nothing — analytics, crash reports, Apple ads, Biome, beta enrollment |
 | `--preset balanced` | 172 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather, nags |
-| `--disable-all` | 270 | everything, console only — **iCloud login, App Store purchases and macOS Update installs break** |
+| `--disable-all` | 270 | balanced, plus Safari services, Photos analysis, Mail/Calendar/Contacts, Music/TV/Books, Maps, Time Machine, Screen Time, HomeKit, printing, iCloud sync — and **iCloud login, App Store purchases and macOS Update installs break** |
+
+`--disable-all` is not a "console only" mode. The GUI, third-party apps, Wi-Fi, audio, Bluetooth and Spotlight all keep working — it disables Apple's own background services, not the desktop. What it does break are the three things in bold above, because it reaches Apple ID auth, App Store commerce and the bridgeOS update path. Re-enable those from the TUI, or with `--restore` / `--enable-all`.
 
 Counts are before pruning: the tool drops labels that don't exist on your macOS build, so what it prints is a little lower.
 
@@ -85,33 +91,6 @@ com.apple.something                # what it does, what breaks
 
 `~/.mac-os-debloat/labels.txt` is appended to the built-in list, in the same format. Labels there show up in the TUI, `--list` and `--disable-all`. They are not in the built-in presets — put them in your own preset for that.
 
-## Screenshot
-
-```
-mac-os-debloat  —  space=toggle  x=sec-toggle  s/S=sec-off/on  [/]=jump  a/n=all/none  p=spotlight  enter=apply  q=quit
-pending: 4   (spotlight: ON)   (checked = enabled/running)
-
-── Siri / voice assistant ──────────────────────────────────────────────────
- *[ ]  com.apple.assistantd                          Siri core
- *[ ]  com.apple.Siri.agent                          Siri agent
-  [ ]  com.apple.SiriTTSTrainingAgent                Siri voice training
-  [ ]  com.apple.siriinferenced                      on-device Siri inference
- *[ ]  com.apple.siriknowledged                      Siri knowledge graph
-  [ ]  com.apple.assistant_cdmd                      Siri continuous dialog manager
-  [✓]  com.apple.parsecd                             Siri/Spotlight suggestions backend
-  [✓]  com.apple.parsec-fbf                          Siri Suggestions feedback
- *[ ]  com.apple.intelligencecontextd                Apple Intelligence context runtime
-  [✓]  com.apple.intelligenceplatformd               Apple Intelligence platform
-
-── Apple Intelligence (Tahoe) ────────────────────────────────────────────── ↓
-  [✓]  com.apple.mlruntimed                          ML runtime
-► [✓]  com.apple.privatecloudcomputed                Private Cloud Compute (AI cloud offload)
-  [✓]  com.apple.modelmanagerd                       AI model manager / downloads
-  [✓]  com.apple.naturallanguaged                    NaturalLanguage framework daemon
-  [✓]  com.apple.generativeexperiencesd              Writing Tools / generative AI
-  [✓]  com.apple.contextstored                       context store (>30GB memory leak)
-```
-
 <details>
 <summary><b>What it disables</b></summary>
 
@@ -123,12 +102,12 @@ pending: 4   (spotlight: ON)   (checked = enabled/running)
 - Diagnostics extras (30) — all telemetry to Apple
 - Apple Music Player (AMP) suite (5), Apple Music / iTunes / Media streaming (7)
 - Safari + Safari extras (7) — for non-Safari users
-- Game Center, Game controllers, Game policy (7)
+- Game Center + game controllers (7)
 - Family / Parental controls (8)
 - Beta program enrollment (6)
-- iMessage / FaceTime / phone relay (10)
+- iMessage / FaceTime / phone relay (9)
 - Apple Mail / Calendar / Contacts / Reminders + AddressBook (7)
-- Continuity / AirPlay / Sidecar / Continuity Capture (~8)
+- Continuity / AirDrop / Sidecar / AirPlay / Continuity Capture (7)
 - Maps, Apple Books, Apple TV+, Stocks/News/Weather/Sports
 - App Store + Apple ID + Apple Pay + SSO
 - iCloud Drive / Keychain Circle / Notifications
@@ -167,7 +146,7 @@ Full curated list with per-label comments lives inside the script (`EMBEDDED_LAB
 
 Uses `launchctl disable`, which writes an override table per launchd domain: `system` jobs (a `LaunchDaemons` plist) go to `/var/db/com.apple.xpc.launchd/disabled.plist`, `gui/$UID` jobs (a `LaunchAgents` plist) to `disabled.$UID.plist`. **An override only takes effect in the domain the job is actually registered in**, so the tool resolves each label's domains and writes only there.
 
-- Wiped by macOS major upgrades (26.3 → 26.4 etc) — re-run after upgrade
+- Wiped by macOS updates (26.3 → 26.4 etc) — re-run after one
 - `system/` disables affect all users · `gui/$UID` disables only current user
 - Multi-user: run once per account
 
@@ -200,7 +179,7 @@ Reported on Tahoe: `com.apple.Siri.agent` provides Mach services the sign-in dia
 <details>
 <summary><b>Don't disable these</b></summary>
 
-These will break the system. Not in default list, but if you add manually:
+None of these are in the catalog, so the tool never touches them. Listed because you can reach them yourself via `~/.mac-os-debloat/labels.txt` — don't:
 
 - `com.apple.WindowServer`, `controlcenter`, `notificationcenterui`, `Finder`, `Dock`, `SystemUIServer` — UI dies
 - `com.apple.coreaudiod` — sound dies
@@ -213,13 +192,16 @@ These will break the system. Not in default list, but if you add manually:
 </details>
 
 <details>
+<a name="why"></a>
 <summary><b>Why</b></summary>
 
 macOS Tahoe (26.x) baselines at ~4-5 GB RAM and a steady CPU drip from ~50 Apple daemons you mostly don't use — Siri, Apple Intelligence, telemetry, ads, predictions, AirPlay, Photos analysis, etc. On a 16 GB Mac that's a third of your memory gone before any of your own apps start.
 
-This tool kills the ones you don't need with a single console util and no install. ~1.5 GB RAM and a few % CPU back for whatever you're actually running — compilers, browsers, VMs, model inference, video editing, games, whatever.
+This tool turns off the ones you don't need, with no install. ~1.5-2 GB of RAM back for whatever you're actually running.
 
-The ~1.5-2 GB figure is the drop in used memory on an idle M4 MacBook Pro 16 GB (macOS 26.3.1) after disabling the full default set and rebooting, compared beforehand. Your number depends on which services you actually run — check `debloat --status` for the reclaimable RAM on your own machine before and after.
+That figure is the drop in used memory on an idle M4 MacBook Pro 16 GB (macOS 26.3.1) after disabling the full default set and rebooting, measured against the same machine beforehand. Yours will differ — it depends on which of these services you actually use.
+
+The `reclaimable RAM` line in `--status` is not a prediction of that gain: it's this machine's free + inactive + speculative + purgeable pages from `vm_stat` right now. Run it before and after a reboot and compare the two numbers.
 
 </details>
 
