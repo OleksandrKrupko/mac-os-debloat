@@ -37,7 +37,7 @@ debloat                    # interactive TUI (default)
 debloat --preset telemetry # disable analytics, crash reports, ads, beta enrollment (46)
 debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (172)
 debloat --list             # print every label, in preset file format
-debloat --status           # per-domain disabled/enabled counts, how many are running, spotlight, free RAM
+debloat --status           # per-domain disabled/enabled, how many run, how many ignore the override, free RAM
 debloat --audit            # list any embedded labels not present on your macOS build
 debloat --disable-all      # disable every label, no exceptions (prompts sudo)
 debloat --enable-all       # re-enable everything — the panic button
@@ -150,9 +150,14 @@ Uses `launchctl disable`, which writes an override table per launchd domain: `sy
 - `system/` disables affect all users · `gui/$UID` disables only current user
 - Multi-user: run once per account
 
-**Reboot persistence is not guaranteed on macOS 26.x.** Measured on 26.5.2 (25F84) with SIP enabled: after a boot, 264 of the 268 catalog labels had no override in effect in the domain their job runs in, and 104 of them were running. `disabled.plist` held 258 overrides, `disabled.$UID.plist` only 95, and both files had been rewritten one minute after boot. The write itself is fine — `sudo launchctl disable gui/$UID/<agent>` returns 0 and the key appears in `disabled.$UID.plist` immediately — so the overrides are lost after the apply, not during it. The mechanism is not established. Reported in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8).
+**macOS 26.x does not reliably honour these overrides.** Two separate failures, both measured on 26.5.2 (25F84) with SIP enabled:
 
-So don't trust it, check it: `debloat --status` reports the per-domain truth plus how many of the labels are running right now. If that count is non-zero after a reboot, re-apply. Every apply also verifies itself and prints any label whose override did not take effect, rather than reporting success.
+- **Overrides are cleared at boot, selectively.** After a boot, 264 of the 268 catalog labels had no override in effect in the domain their job runs in. The ones that get cleared are the ones that would have taken effect; overrides sitting in a domain where the job isn't registered survive untouched. Both store files are rewritten within two minutes of boot. The write itself is fine — `sudo launchctl disable gui/$UID/<agent>` returns 0 and the key appears immediately — so they are lost after the apply, not during it. Reported in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8).
+- **launchd also starts jobs whose override is intact.** On a machine 8 days into an uptime, 14 catalog labels were disabled in every domain they are registered in and running anyway, started by launchd (`ppid 1`) up to 19 hours after the override store was last written. `launchctl print-disabled system` reads `=> disabled` for them the whole time.
+
+Neither mechanism is established, and no version of this tool can fix either from userspace — `launchctl disable` is the supported SIP-safe interface, and it is what is being ignored.
+
+So don't trust it, check it. `debloat --status` reports the per-domain truth, how many catalog services are running right now, and how many of them are **disabled but running anyway** — that last number is the one that catches both failures. If it's non-zero, the overrides are not being honoured on your build. Every apply also verifies itself and prints any label whose override did not take effect, rather than reporting success.
 
 </details>
 
