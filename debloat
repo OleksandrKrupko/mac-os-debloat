@@ -526,13 +526,14 @@ def plist_domains() -> dict[str, set[str]]:
     return found
 
 
-def domain_state(domain: str) -> tuple[set[str], set[str]]:
-    """(labels registered in the domain, labels disabled by an override there).
+def domain_state(domain: str) -> tuple[dict[str, int], set[str]]:
+    """({label: pid, 0 when not running}, labels disabled by an override there).
     One `launchctl print <domain>` carries both; its `disabled services` block
-    is the same table `print-disabled` shows."""
+    is the same table `print-disabled` shows, and its `services` block is
+    launchd's own pid for every job registered in the domain."""
     r = subprocess.run(["launchctl", "print", domain],
                        capture_output=True, text=True, check=False)
-    registered: set[str] = set()
+    registered: dict[str, int] = {}
     disabled: set[str] = set()
     block = ""
     for line in r.stdout.splitlines():
@@ -546,7 +547,7 @@ def domain_state(domain: str) -> tuple[set[str], set[str]]:
         if block == "services":
             fields = line.split()
             if fields:
-                registered.add(fields[-1])
+                registered[fields[-1]] = int(fields[0]) if fields[0].isdigit() else 0
         elif block == "disabled services":
             entry = re.match(r'\s*"([^"]+)"\s*=>\s*(true|disabled)\s*$', line)
             if entry:
@@ -587,36 +588,18 @@ def refresh_state(sections: list[Section]) -> None:
             it.selected = not it.disabled
 
 
-def find_pids_for_labels(labels: list[str]) -> dict[str, list[int]]:
-    """Return {label: [pids]} for labels with matching running processes.
-    Matches by basename of executable equal to label's last segment,
-    or by label appearing in full command line."""
+def running_pids(labels: list[str]) -> dict[str, list[int]]:
+    """{label: [pids]} for the given labels, straight from launchd. Matching a
+    process name to a label instead guesses wrong whenever two labels share a
+    last segment (`com.apple.spindump` / `com.apple.metadata.mds.spindump`)."""
     if not labels:
         return {}
-    r = subprocess.run(["ps", "-axm", "-o", "pid=,comm="],
-                       capture_output=True, text=True, check=False)
-    short_to_label: dict[str, str] = {}
-    for lab in labels:
-        short_to_label[lab.rsplit(".", 1)[-1]] = lab
-    label_set = set(labels)
+    wanted = set(labels)
     out: dict[str, list[int]] = {}
-    for line in r.stdout.splitlines():
-        parts = line.strip().split(None, 1)
-        if len(parts) < 2:
-            continue
-        pid_str, cmd = parts
-        try:
-            pid = int(pid_str)
-        except ValueError:
-            continue
-        cmd_short = cmd.rsplit("/", 1)[-1]
-        if cmd_short in short_to_label:
-            out.setdefault(short_to_label[cmd_short], []).append(pid)
-            continue
-        for lab in label_set:
-            if lab in cmd:
-                out.setdefault(lab, []).append(pid)
-                break
+    for domain in DOMAINS:
+        for label, pid in domain_state(domain)[0].items():
+            if pid and label in wanted:
+                out.setdefault(label, []).append(pid)
     return out
 
 
@@ -665,7 +648,7 @@ def apply_changes(sections: list[Section]) -> dict:
     # Phase 2: nuclear kill -9 for anything still running after bootout
     killed = 0
     if to_disable:
-        survivors = find_pids_for_labels(to_disable)
+        survivors = running_pids(to_disable)
         for label, pids in survivors.items():
             for pid in pids:
                 r = subprocess.run(["sudo", "kill", "-9", str(pid)],
@@ -677,7 +660,7 @@ def apply_changes(sections: list[Section]) -> dict:
     time.sleep(0.4)
     stragglers: dict[str, list[int]] = {}
     if to_disable:
-        stragglers = find_pids_for_labels(to_disable)
+        stragglers = running_pids(to_disable)
 
     disabled_now = {d: domain_state(d)[1] for d in DOMAINS}
     return {
@@ -944,11 +927,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
         elif c == ord("["):
             cursor = jump_section(sections, flat, cursor, direction=-1)
         elif c == ord("r"):
-            curses.endwin()
-            if not prime_sudo():
-                return "sudo failed"
             refresh_state(sections)
-            stdscr.clear()
             status = "state reloaded"
         elif c == ord("p"):
             curses.endwin()
@@ -1045,7 +1024,9 @@ def cmd_status(sections: list[Section], as_json: bool) -> int:
     refresh_state(sections)
     disabled = sum(1 for sec in sections for it in sec.items if it.disabled)
     total = sum(len(sec.items) for sec in sections)
-    running = find_pids_for_labels([it.label for sec in sections for it in sec.items])
+    running = running_pids([it.label for sec in sections for it in sec.items])
+    ignored = sorted(it.label for sec in sections for it in sec.items
+                     if it.disabled and it.label in running)
     spot = spotlight_state()
     free = mem_free_mb()
     if as_json:
@@ -1054,6 +1035,7 @@ def cmd_status(sections: list[Section], as_json: bool) -> int:
             "disabled": disabled,
             "enabled": total - disabled,
             "running": sorted(running),
+            "disabled_but_running": ignored,
             "spotlight": spot,
             "reclaimable_ram_mb": free,
         }, indent=2))
@@ -1061,6 +1043,9 @@ def cmd_status(sections: list[Section], as_json: bool) -> int:
     print(f"labels present on this macOS: {total}")
     print(f"  disabled: {disabled}   enabled: {total - disabled}")
     print(f"  running now: {len(running)}")
+    if ignored:
+        print(f"  disabled but running anyway: {len(ignored)}   "
+              f"(launchd started these despite the override)")
     print(f"spotlight: {spot}")
     if free is not None:
         print(f"reclaimable RAM now: ~{free} MB")
@@ -1165,7 +1150,7 @@ def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
     return run_apply(sections, dry_run)
 
 
-VERSION = "0.7.1"
+VERSION = "0.7.2"
 
 HELP = f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services.
 

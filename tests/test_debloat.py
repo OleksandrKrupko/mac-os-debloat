@@ -7,8 +7,10 @@ SIP-enabled machine from issue #8 without touching the real one.
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.machinery
 import importlib.util
+import io
 import json
 import os
 import stat
@@ -49,8 +51,8 @@ if action == "print":
     print("\t\tcom.apple.SomeBlastDoorService")
     print("\t}")
     print("\tservices = {")
-    for label in d["services"]:
-        print(f"\t\t     0      - \t{label}")
+    for label, pid in d["services"].items():
+        print(f"\t\t     {pid}      - \t{label}")
     print("\t}")
     print("\tdisabled services = {")
     for label in d["disabled"]:
@@ -79,7 +81,7 @@ open(state_path, "w").write(json.dumps(state))
 sys.exit(0)
 '''
 
-FAKE_SUDO = '#!/bin/sh\nexec "$@"\n'
+FAKE_SUDO = '#!/bin/sh\n[ "$1" = "-v" ] && exit 0\nexec "$@"\n'
 
 
 def load_debloat():
@@ -110,8 +112,8 @@ class FakeMachine:
             "overrides_land": True,
             "fail": {},
             "domains": {
-                "system": {"services": [], "disabled": []},
-                self.gui: {"services": [], "disabled": []},
+                "system": {"services": {}, "disabled": []},
+                self.gui: {"services": {}, "disabled": []},
             },
         }
         bindir = tmp / "bin"
@@ -129,13 +131,13 @@ class FakeMachine:
         self.state_path.write_text(json.dumps(self.state))
 
     def add(self, label: str, *, agent_plist=False, daemon_plist=False,
-            registered=(), disabled=()):
+            registered=(), disabled=(), pid=0):
         if agent_plist:
             (self.agents / f"{label}.plist").touch()
         if daemon_plist:
             (self.daemons / f"{label}.plist").touch()
         for domain in registered:
-            self.state["domains"][domain]["services"].append(label)
+            self.state["domains"][domain]["services"][label] = pid
         for domain in disabled:
             self.state["domains"][domain]["disabled"].append(label)
         self.flush()
@@ -156,7 +158,7 @@ class FakeMachine:
         self.state = json.loads(self.state_path.read_text())
 
 
-class DomainTest(unittest.TestCase):
+class FakeMachineTest(unittest.TestCase):
     def setUp(self):
         self.debloat = load_debloat()
         self._path = os.environ["PATH"]
@@ -174,6 +176,14 @@ class DomainTest(unittest.TestCase):
     def items(self, secs):
         return {it.label: it for sec in secs for it in sec.items}
 
+    def capture(self, fn, *args) -> str:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fn(*args)
+        return out.getvalue()
+
+
+class DomainTest(FakeMachineTest):
     # --- issue #8 part 2: --status unions the domains ---
 
     def test_override_in_a_domain_the_job_does_not_live_in_is_not_disabled(self):
@@ -268,6 +278,125 @@ class DomainTest(unittest.TestCase):
         self.assertEqual(result["not_disabled"], ["com.example.agent"])
 
 
+class RunningPidsTest(FakeMachineTest):
+    def test_labels_sharing_a_last_segment_are_not_confused(self):
+        """`com.apple.spindump` and `com.apple.metadata.mds.spindump` both end in
+        `spindump`. Keying on that segment reported the idle one as running."""
+        self.machine.add("com.example.spindump", daemon_plist=True,
+                         registered=["system"], pid=0)
+        self.machine.add("com.example.metadata.spindump", daemon_plist=True,
+                         registered=["system"], pid=900)
+        pids = self.debloat.running_pids(
+            ["com.example.spindump", "com.example.metadata.spindump"])
+        self.assertEqual(pids, {"com.example.metadata.spindump": [900]})
+
+    def test_a_label_running_in_both_domains_reports_both_pids(self):
+        self.machine.add("com.example.both", agent_plist=True, daemon_plist=True,
+                         registered=["system"], pid=11)
+        self.machine.state["domains"][self.gui]["services"]["com.example.both"] = 22
+        self.machine.flush()
+        self.assertEqual(self.debloat.running_pids(["com.example.both"]),
+                         {"com.example.both": [11, 22]})
+
+
+class StatusTest(FakeMachineTest):
+    def test_status_counts_a_label_that_is_disabled_and_still_running(self):
+        """macOS 26.5.2 starts jobs whose override is in place and in the right
+        domain, so `disabled` alone reads as success while the daemon runs."""
+        self.machine.add("com.example.ignored", daemon_plist=True,
+                         registered=["system"], disabled=["system"], pid=770)
+        self.machine.add("com.example.obeyed", daemon_plist=True,
+                         registered=["system"], disabled=["system"], pid=0)
+        secs, _ = self.sections("com.example.ignored", "com.example.obeyed")
+        out = json.loads(self.capture(self.debloat.cmd_status, secs, True))
+        self.assertEqual(out["disabled"], 2)
+        self.assertEqual(out["disabled_but_running"], ["com.example.ignored"])
+
+
+class CommandLineTest(FakeMachineTest):
+    """The flags end to end, through `main()`, against the fake machine."""
+
+    def setUp(self):
+        super().setUp()
+        self.debloat.BACKUP_DIR = self.machine.tmp / "backup"
+        self.debloat.PRESETS_DIR = self.debloat.BACKUP_DIR / "presets"
+        self.debloat.USER_LABELS_FILE = self.debloat.BACKUP_DIR / "labels.txt"
+        self.debloat.PRESETS_DIR.mkdir(parents=True)
+        self.debloat.spotlight_state = lambda: "off"
+        self.debloat.mem_free_mb = lambda: 4096
+
+    def run_cli(self, *argv) -> tuple[int, str]:
+        original = sys.argv
+        sys.argv = ["debloat", *argv]
+        try:
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                code = self.debloat.main()
+            return code, out.getvalue()
+        finally:
+            sys.argv = original
+
+    def two_labels(self):
+        self.debloat.EMBEDDED_LABELS = (
+            "# === Telemetry [telemetry] ===\n"
+            "com.example.telemetry  # analytics\n"
+            "# === Photos ===\n"
+            "com.example.photos     # photo analysis\n"
+        )
+        self.machine.add("com.example.telemetry", daemon_plist=True, registered=["system"])
+        self.machine.add("com.example.photos", daemon_plist=True, registered=["system"])
+
+    def test_dry_run_changes_nothing_on_the_system(self):
+        self.two_labels()
+        code, out = self.run_cli("--disable-all", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("[dry-run] would disable 2", out)
+        self.assertEqual(self.machine.commands(), [])
+
+    def test_preset_does_not_re_enable_a_label_outside_it(self):
+        """`--preset` disables its own labels and leaves the rest as they are;
+        re-enabling something the user had already turned off is data loss."""
+        self.two_labels()
+        self.machine.state["domains"]["system"]["disabled"].append("com.example.photos")
+        self.machine.flush()
+        code, _ = self.run_cli("--preset", "telemetry")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.machine.commands(),
+                         ["disable system/com.example.telemetry",
+                          "bootout system/com.example.telemetry"])
+
+    def test_restore_puts_back_exactly_the_pre_apply_state(self):
+        self.two_labels()
+        self.machine.state["domains"]["system"]["disabled"].append("com.example.photos")
+        self.machine.flush()
+        self.run_cli("--disable-all")
+        self.machine.reread()
+        self.assertEqual(sorted(self.machine.state["domains"]["system"]["disabled"]),
+                         ["com.example.photos", "com.example.telemetry"])
+        self.run_cli("--restore")
+        self.machine.reread()
+        self.assertEqual(self.machine.state["domains"]["system"]["disabled"],
+                         ["com.example.photos"])
+
+    def test_list_output_is_valid_input_for_preset(self):
+        """The README promises the round-trip; it breaks if either the comment
+        column or the section header stops parsing."""
+        self.two_labels()
+        _, listed = self.run_cli("--list")
+        (self.debloat.PRESETS_DIR / "mine.txt").write_text(listed)
+        code, out = self.run_cli("--preset", "mine", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("preset mine: 2 labels", out)
+
+    def test_user_labels_file_extends_the_catalog(self):
+        self.two_labels()
+        self.debloat.USER_LABELS_FILE.write_text("com.example.extra  # mine\n")
+        self.machine.add("com.example.extra", daemon_plist=True, registered=["system"])
+        code, out = self.run_cli("--disable-all", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("disable  com.example.extra", out)
+
+
 class DomainStateParseTest(unittest.TestCase):
     """`launchctl print <domain>` output, verbatim shape, with the neighbouring
     blocks that must not leak into either set."""
@@ -304,9 +433,9 @@ system = {
             registered, disabled = debloat.domain_state("system")
         finally:
             subprocess.run = original
-        self.assertEqual(registered, {"com.apple.runningboardd",
-                                      "com.apple.kernelmanager_helper",
-                                      "com.apple.wifiFirmwareLoader"})
+        self.assertEqual(registered, {"com.apple.runningboardd": 441,
+                                      "com.apple.kernelmanager_helper": 0,
+                                      "com.apple.wifiFirmwareLoader": 0})
         self.assertEqual(disabled, {"com.apple.tipsd"})
 
 
