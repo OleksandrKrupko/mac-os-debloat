@@ -1165,7 +1165,7 @@ def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
     return run_apply(sections, dry_run)
 
 
-VERSION = "0.7.0"
+VERSION = "0.7.1"
 
 HELP = f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services.
 
