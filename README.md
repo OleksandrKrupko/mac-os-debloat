@@ -28,7 +28,7 @@ All three methods need `python3` — preinstalled with the Xcode Command Line To
 
 ![mac-os-debloat TUI — preset menu on top, then the Spotlight row and 270 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
 
-The top block is a menu: arrow onto `telemetry`, `balanced`, `Disable all` or `Enable all` and press `enter` to apply it right away. `Disable all` disappears once everything is off, `Enable all` once everything is on, so every row on offer does something.
+The top block is a menu: arrow onto `telemetry`, `balanced`, `disable all` or `enable all` and press `enter` to apply it right away. `disable all` disappears once everything is off, `enable all` once everything is on, so every row on offer does something.
 
 Everything below the menu is a checkbox: `[✓]` on, `[ ]` off, `[▘]` spinning while the system is still settling into the state you asked for. `space` flips the row under the cursor, `enter` applies whatever is ticked. The bottom line always explains the row under the cursor — what the service does and what you lose with it off. The first checkbox is Spotlight ([below](#spotlight)); everything after it is a launchd service.
 
@@ -52,7 +52,7 @@ debloat --status --json    # machine-readable status
 
 An apply is two `sudo launchctl` calls per label per domain, so `--disable-all` runs several hundred of them; it prints a `disabling 137/268 com.apple.…` line in place while it works, on the command line and in the TUI alike. Piped output gets none of that.
 
-`--status`, `--audit`, `--list`, and `--dry-run` need no sudo — reading launchd state is unprivileged. Every apply first snapshots your current state to `~/.mac-os-debloat/latest.json`, so `--restore` always brings you back. If anything feels off, `debloat --enable-all` turns it all back on.
+An apply prompts for your sudo password on the TUI's own bottom line — the TUI never drops back to your shell, and the progress line and the result land in the same place. `--status`, `--audit`, `--list`, and `--dry-run` need no sudo — reading launchd state is unprivileged. Every apply first snapshots your current state to `~/.mac-os-debloat/latest.json`, so `--restore` always brings you back. If anything feels off, `debloat --enable-all` turns it all back on.
 
 ## Spotlight
 
@@ -84,7 +84,7 @@ Neither preset touches Apple ID auth (`akd`, `appleaccountd`, `adid`, `AppSSODae
 
 98 labels sit between `balanced` and `--disable-all` — Safari, Photos, Music/TV/Books, Maps, Time Machine, Contacts/Calendar/Mail, Game Center, HomeKit, Screen Time, iCloud sync, print. Which of those you want is personal, so there's no preset for it: make your own.
 
-Every rung is also a row in the TUI's preset menu — arrow onto it, press `enter`. To turn something back on, use the TUI (`space` toggles an item, `enter` applies), the `Enable all` menu row, `--restore`, or `--enable-all`.
+Every rung is also a row in the TUI's preset menu — arrow onto it, press `enter`. To turn something back on, use the TUI (`space` toggles an item, `enter` applies), the `enable all` menu row, `--restore`, or `--enable-all`.
 
 ### Make your own preset
 
@@ -150,7 +150,7 @@ Full curated list with per-label comments lives inside the script (`EMBEDDED_LAB
 | `r` | reload state from system |
 | `q` / `esc` | quit |
 
-`[✓]` = on · `[ ]` = off · `[▘]` = the system is still settling into the state you asked for · ` *` = changes on enter. The Spotlight row is toggled and applied like any other. The preset menu rows carry no checkbox — `space` does nothing on them, `enter` runs them. `Disable all` asks for confirmation first.
+`[✓]` = on · `[ ]` = off · `[▘]` = the system is still settling into the state you asked for · ` *` = changes on enter. The Spotlight row is toggled and applied like any other. The preset menu rows carry no checkbox — `space` does nothing on them, `enter` runs them. `disable all` asks for confirmation first.
 
 </details>
 

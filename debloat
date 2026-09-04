@@ -635,7 +635,7 @@ def progress(text: str) -> None:
     sys.stdout.flush()
 
 
-def apply_changes(sections: list[Section]) -> dict:
+def apply_changes(sections: list[Section], report=progress) -> dict:
     to_disable, to_enable = pending_changes(sections)
     domains_of = {it.label: it.domains for sec in sections for it in sec.items}
     override_failures: list[tuple[str, str]] = []
@@ -658,22 +658,22 @@ def apply_changes(sections: list[Section]) -> dict:
     total = len(to_disable) + len(to_enable)
     width = len(str(total))
     for n, label in enumerate(to_disable, 1):
-        progress(f"  disabling  {n:>{width}}/{total}  {label}")
+        report(f"  disabling  {n:>{width}}/{total}  {label}")
         for domain in sorted(domains_of[label]):
             launchctl("disable", domain, label)
             launchctl("bootout", domain, label)
     for n, label in enumerate(to_enable, len(to_disable) + 1):
-        progress(f"  enabling   {n:>{width}}/{total}  {label}")
+        report(f"  enabling   {n:>{width}}/{total}  {label}")
         for domain in sorted(domains_of[label]):
             launchctl("enable", domain, label)
 
     # Phase 2: nuclear kill -9 for anything still running after bootout
     killed = 0
     if to_disable:
-        progress("  looking for survivors...")
+        report("  looking for survivors...")
         survivors = running_pids(to_disable)
         for label, pids in survivors.items():
-            progress(f"  killing    {label}")
+            report(f"  killing    {label}")
             for pid in pids:
                 r = subprocess.run(["sudo", "kill", "-9", str(pid)],
                                    capture_output=True, check=False)
@@ -681,14 +681,14 @@ def apply_changes(sections: list[Section]) -> dict:
                     killed += 1
 
     # Phase 3: brief settle then verify nothing respawned
-    progress("  verifying...")
+    report("  verifying...")
     time.sleep(0.4)
     stragglers: dict[str, list[int]] = {}
     if to_disable:
         stragglers = running_pids(to_disable)
 
     disabled_now = {d: domain_state(d)[1] for d in DOMAINS}
-    progress("")
+    report("")
     return {
         "disabled": len(to_disable),
         "enabled": len(to_enable),
@@ -703,21 +703,24 @@ def apply_changes(sections: list[Section]) -> dict:
     }
 
 
-def report_apply_problems(result: dict) -> None:
+def apply_problems(result: dict) -> str:
+    """The report as text rather than printed: the TUI stays on the alternate
+    screen through an apply, so anything written there is gone the moment
+    curses exits. It holds this until after that."""
+    out: list[str] = []
     for cmd, msg in result["override_failures"]:
-        print(f"  FAILED  launchctl {cmd}: {msg}", file=sys.stderr)
+        out.append(f"  FAILED  launchctl {cmd}: {msg}")
     for msg, count in sorted(result["bootout_failures"].items(), key=lambda kv: -kv[1]):
-        print(f"  bootout failed on {count} label(s): {msg}", file=sys.stderr)
+        out.append(f"  bootout failed on {count} label(s): {msg}")
     for key, verb in (("not_disabled", "disabled"), ("not_enabled", "enabled")):
         if result[key]:
-            print(f"⚠ {len(result[key])} labels are NOT {verb} in every domain they "
-                  f"run in — the override did not take effect:", file=sys.stderr)
-            for label in result[key]:
-                print(f"  {label}", file=sys.stderr)
+            out.append(f"⚠ {len(result[key])} labels are NOT {verb} in every domain they "
+                       f"run in — the override did not take effect:")
+            out.extend(f"  {label}" for label in result[key])
     if result["stragglers"]:
-        print(f"{len(result['stragglers'])} respawned by launchd:", file=sys.stderr)
-        for label, pids in result["stragglers"].items():
-            print(f"  {label}  pids={pids}", file=sys.stderr)
+        out.append(f"{len(result['stragglers'])} respawned by launchd:")
+        out.extend(f"  {label}  pids={pids}" for label, pids in result["stragglers"].items())
+    return "".join(f"{line}\n" for line in out)
 
 
 def reopen_tty_stdin() -> bool:
@@ -779,27 +782,27 @@ def refresh_spotlight(section: Section) -> None:
     item.comment = SPOTLIGHT_INDEXING if item.state == "indexing" else SPOTLIGHT_COMMENT
 
 
-def spotlight_set(enabled: bool) -> tuple[bool, str]:
-    progress(f"  turning Spotlight {'on' if enabled else 'off'}...")
+def spotlight_set(enabled: bool, report=progress) -> tuple[bool, str]:
+    report(f"  turning Spotlight {'on' if enabled else 'off'}...")
     if not enabled:
         # `-i off` leaves the Data volume's indexer running on macOS 26; `-d`
         # stops indexing and searching on every volume.
         r = subprocess.run(["sudo", "mdutil", "-a", "-d"],
                            capture_output=True, text=True, check=False)
-        progress("")
+        report("")
         if r.returncode != 0:
             return False, f"mdutil failed: {r.stderr.strip()}"
         return True, "Spotlight off — indexing and search stopped"
     r = subprocess.run(["sudo", "mdutil", "-a", "-i", "on"],
                        capture_output=True, text=True, check=False)
     if r.returncode != 0:
-        progress("")
+        report("")
         return False, f"mdutil failed: {r.stderr.strip()}"
     # `-i on` only sets the flag; a previously disabled index stays in an
     # "unknown" state and never rebuilds, so Finder metadata queries hang.
     e = subprocess.run(["sudo", "mdutil", "-a", "-E"],
                        capture_output=True, text=True, check=False)
-    progress("")
+    report("")
     if e.returncode != 0:
         return False, f"mdutil -E failed: {e.stderr.strip()}"
     return True, "Spotlight on — full reindex running (~10-30 min of CPU)"
@@ -833,11 +836,11 @@ def menu_section(sections: list[Section]) -> Section:
     ]
     if not all(it.disabled for it in flat):
         items.append(Item(
-            label="Disable all", section=MENU_SECTION, action="disable-all",
+            label="disable all", section=MENU_SECTION, action="disable-all",
             comment=f"disable all {len(flat)} labels — breaks iCloud login, App Store, Updates"))
     if any(it.disabled for it in flat):
         items.append(Item(
-            label="Enable all", section=MENU_SECTION, action="enable-all",
+            label="enable all", section=MENU_SECTION, action="enable-all",
             comment=f"turn all {len(flat)} labels back on — the panic button"))
     return Section(title=MENU_SECTION, items=items)
 
@@ -989,6 +992,17 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
     spotlight = spotlight_section()
     tick = 0
     polled_at = 0.0
+    problem_reports: list[str] = []
+
+    def in_tui(text: str) -> None:
+        """Apply progress on the bottom line, since the TUI never leaves the
+        screen now. Same calls that write `\\r` lines on the command line."""
+        h, w = stdscr.getmaxyx()
+        stdscr.move(h - 1, 0)
+        stdscr.clrtoeol()
+        stdscr.addnstr(h - 1, 0, text.strip()[:w - 1], w - 1, curses.A_BOLD)
+        stdscr.refresh()
+
     while True:
         view = [menu_section(sections), spotlight, *sections]
         flat = flat_index(view)
@@ -1009,7 +1023,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             continue
         status = ""
         if c in (ord("q"), 27):
-            return None
+            return "".join(problem_reports) or None
         if c in (curses.KEY_DOWN, ord("j")):
             cursor = min(cursor + 1, len(flat) - 1)
         elif c in (curses.KEY_UP, ord("k")):
@@ -1048,29 +1062,42 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             if not any(pending_changes(sections)) and spot.selected != spot.disabled:
                 status = f"{done}nothing to change"
                 continue
-            curses.endwin()
-            if not prime_sudo():
-                return "sudo failed"
+            # No endwin: that emits rmcup and drops the user back into their
+            # shell scrollback mid-apply. sudo prompts on the alternate screen
+            # instead, and redrawwin repairs what it wrote over.
+            curses.def_prog_mode()
+            h, w = stdscr.getmaxyx()
+            stdscr.move(h - 1, 0)
+            stdscr.clrtoeol()
+            stdscr.refresh()
+            curses.curs_set(1)
+            is_root = prime_sudo()
+            curses.curs_set(0)
+            curses.reset_prog_mode()
+            stdscr.redrawwin()
+            stdscr.refresh()
+            if not is_root:
+                status = f"{done}sudo failed — nothing applied"
+                continue
             write_snapshot(sections)
-            result = apply_changes(sections)
+            result = apply_changes(sections, report=in_tui)
             refresh_state(sections)
             spotlight_msg = ""
             if spot.selected == spot.disabled:
-                _, spotlight_msg = spotlight_set(spot.selected)
+                _, spotlight_msg = spotlight_set(spot.selected, report=in_tui)
                 refresh_spotlight(spotlight)
-            stdscr.clear()
             status = (
                 f'{done}applied: {result["disabled"]} disabled, {result["enabled"]} enabled, '
                 f'{result["killed"]} killed'
             )
             if spotlight_msg:
                 status += f"   {spotlight_msg}"
-            problems = (len(result["override_failures"]) + len(result["not_disabled"])
-                        + len(result["not_enabled"]) + len(result["stragglers"]))
-            if problems:
-                status += f"  ⚠ {problems} problems (see terminal after quit)"
-                sys.stderr.write("\n[debloat] apply problems:\n")
-                report_apply_problems(result)
+            report = apply_problems(result)
+            if report:
+                problems = (len(result["override_failures"]) + len(result["not_disabled"])
+                            + len(result["not_enabled"]) + len(result["stragglers"]))
+                status += f"  ⚠ {problems} problems (printed after quit)"
+                problem_reports.append(f"\n[debloat] apply problems:\n{report}")
 
 
 def macos_major() -> int | None:
@@ -1133,7 +1160,7 @@ def run_apply(sections: list[Section], dry_run: bool) -> int:
     result = apply_changes(sections)
     print(f'applied: {result["disabled"]} disabled, {result["enabled"]} enabled, '
           f'{result["killed"]} killed')
-    report_apply_problems(result)
+    sys.stderr.write(apply_problems(result))
     return 0
 
 
@@ -1272,7 +1299,7 @@ def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
     return run_apply(sections, dry_run)
 
 
-VERSION = "0.10.0"
+VERSION = "0.11.0"
 
 HELP = f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services and the Spotlight index.
 
@@ -1297,7 +1324,7 @@ Presets:
   balanced    telemetry + Siri, Apple Intelligence, iMessage/Continuity, Family
   custom      {PRESETS_DIR}/NAME.txt
 
-  The TUI lists telemetry, balanced, Disable all and Enable all as menu rows
+  The TUI lists telemetry, balanced, disable all and enable all as menu rows
   above the checkboxes — arrow onto one and press enter to apply it.
 
   A preset only disables its own labels; everything else is left as-is, and
