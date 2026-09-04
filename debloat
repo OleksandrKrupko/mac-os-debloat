@@ -6,7 +6,8 @@ on Enter.
 
 The top rows are a preset menu — enter on one applies it right away. Below
 that the Spotlight file index, then every launchd service. `[✓]` means on,
-`[ ]` means off, `*` marks a row that changes on enter.
+`[ ]` means off, `*` marks a row that changes on enter, and a spinner marks
+a row the system has not finished settling into (Spotlight rebuilding).
 
 Keys:
   ↑/↓ or j/k   move
@@ -476,6 +477,7 @@ class Item:
     selected: bool = False
     domains: set[str] = field(default_factory=set)
     action: str = ""
+    state: str = ""
 
 
 @dataclass
@@ -621,6 +623,18 @@ def pending_changes(sections: list[Section]) -> tuple[list[str], list[str]]:
     return to_disable, to_enable
 
 
+def progress(text: str) -> None:
+    """Overwrite one line in place. An apply is two sudo `launchctl` runs per
+    label per domain, so `--disable-all` sits silent for hundreds of them
+    otherwise. Skipped off a tty so piped output never gets \\r spam."""
+    if not sys.stdout.isatty():
+        return
+    # Wrapping would leave every frame on screen instead of overwriting one line.
+    w = min(78, os.get_terminal_size().columns - 1)
+    sys.stdout.write("\r" + text[:w].ljust(w) + "\r")
+    sys.stdout.flush()
+
+
 def apply_changes(sections: list[Section]) -> dict:
     to_disable, to_enable = pending_changes(sections)
     domains_of = {it.label: it.domains for sec in sections for it in sec.items}
@@ -641,19 +655,25 @@ def apply_changes(sections: list[Section]) -> dict:
 
     # Phase 1: launchctl disable + bootout (or enable), only in the domains the
     # job is registered in — an override written elsewhere never takes effect.
-    for label in to_disable:
+    total = len(to_disable) + len(to_enable)
+    width = len(str(total))
+    for n, label in enumerate(to_disable, 1):
+        progress(f"  disabling  {n:>{width}}/{total}  {label}")
         for domain in sorted(domains_of[label]):
             launchctl("disable", domain, label)
             launchctl("bootout", domain, label)
-    for label in to_enable:
+    for n, label in enumerate(to_enable, len(to_disable) + 1):
+        progress(f"  enabling   {n:>{width}}/{total}  {label}")
         for domain in sorted(domains_of[label]):
             launchctl("enable", domain, label)
 
     # Phase 2: nuclear kill -9 for anything still running after bootout
     killed = 0
     if to_disable:
+        progress("  looking for survivors...")
         survivors = running_pids(to_disable)
         for label, pids in survivors.items():
+            progress(f"  killing    {label}")
             for pid in pids:
                 r = subprocess.run(["sudo", "kill", "-9", str(pid)],
                                    capture_output=True, check=False)
@@ -661,12 +681,14 @@ def apply_changes(sections: list[Section]) -> dict:
                     killed += 1
 
     # Phase 3: brief settle then verify nothing respawned
+    progress("  verifying...")
     time.sleep(0.4)
     stragglers: dict[str, list[int]] = {}
     if to_disable:
         stragglers = running_pids(to_disable)
 
     disabled_now = {d: domain_state(d)[1] for d in DOMAINS}
+    progress("")
     return {
         "disabled": len(to_disable),
         "enabled": len(to_enable),
@@ -737,6 +759,9 @@ SPOTLIGHT_SECTION = "Spotlight file index"
 SPOTLIGHT_COMMENT = ("reads every new or changed file to power Cmd-Space and Finder search. "
                      "Off: no background indexing, RAM and CPU back; VS Code, grep, fd, git "
                      "unaffected. Lost: Cmd-Space file search, Finder search, Mail search")
+SPOTLIGHT_INDEXING = ("rebuilding the index — this runs for 10-30 minutes of CPU. Cmd-Space "
+                      "and Finder search stay incomplete until it lands; nothing to do but "
+                      "wait, and quitting here does not stop it")
 
 
 def spotlight_section() -> Section:
@@ -748,27 +773,33 @@ def spotlight_section() -> Section:
 
 def refresh_spotlight(section: Section) -> None:
     item = section.items[0]
-    item.disabled = spotlight_state() == "off"
+    item.state = spotlight_state()
+    item.disabled = item.state == "off"
     item.selected = not item.disabled
+    item.comment = SPOTLIGHT_INDEXING if item.state == "indexing" else SPOTLIGHT_COMMENT
 
 
 def spotlight_set(enabled: bool) -> tuple[bool, str]:
+    progress(f"  turning Spotlight {'on' if enabled else 'off'}...")
     if not enabled:
         # `-i off` leaves the Data volume's indexer running on macOS 26; `-d`
         # stops indexing and searching on every volume.
         r = subprocess.run(["sudo", "mdutil", "-a", "-d"],
                            capture_output=True, text=True, check=False)
+        progress("")
         if r.returncode != 0:
             return False, f"mdutil failed: {r.stderr.strip()}"
         return True, "Spotlight off — indexing and search stopped"
     r = subprocess.run(["sudo", "mdutil", "-a", "-i", "on"],
                        capture_output=True, text=True, check=False)
     if r.returncode != 0:
+        progress("")
         return False, f"mdutil failed: {r.stderr.strip()}"
     # `-i on` only sets the flag; a previously disabled index stays in an
     # "unknown" state and never rebuilds, so Finder metadata queries hang.
     e = subprocess.run(["sudo", "mdutil", "-a", "-E"],
                        capture_output=True, text=True, check=False)
+    progress("")
     if e.returncode != 0:
         return False, f"mdutil -E failed: {e.stderr.strip()}"
     return True, "Spotlight on — full reindex running (~10-30 min of CPU)"
@@ -867,7 +898,13 @@ def build_display_rows(sections: list[Section]) -> tuple[list[tuple[str, object]
     return rows, item_to_row
 
 
-def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list[int]) -> None:
+SPINNER = "▖▘▝▗"
+SPINNER_MS = 140
+SPOTLIGHT_POLL_S = 3
+
+
+def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list[int],
+         tick: int = 0) -> None:
     stdscr.erase()
     h, w = stdscr.getmaxyx()
     title = ("mac-os-debloat   ↑↓ move   space toggle   [ ] section   "
@@ -908,6 +945,10 @@ def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list
             it = payload  # type: ignore[assignment]
             if it.action:
                 text = f"   ▸   {it.label:<48}  {it.comment}"
+            elif it.state == "indexing" and it.selected != it.disabled:
+                # A ticked change outranks the spinner: the user must still see
+                # the `*` and the box they asked for while the rebuild runs.
+                text = f"  [{SPINNER[tick % len(SPINNER)]}]  {it.label:<48}  {it.comment}"
             else:
                 mark = "[✓]" if it.selected else "[ ]"
                 changed = " *" if it.selected == it.disabled else "  "
@@ -946,13 +987,27 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
     status = ""
     scroll = [0]
     spotlight = spotlight_section()
+    tick = 0
+    polled_at = 0.0
     while True:
         view = [menu_section(sections), spotlight, *sections]
         flat = flat_index(view)
         cursor = max(0, min(cursor, len(flat) - 1))
-        draw(stdscr, view, cursor, status, scroll)
-        status = ""
+        # Only run getch on a timer while the spinner has something to say —
+        # a permanent timeout would put us back in the issue #1 busy-loop, and
+        # the poll is rate-limited separately so the animation never costs an
+        # `mdutil` per frame.
+        is_spinning = spotlight.items[0].state == "indexing"
+        stdscr.timeout(SPINNER_MS if is_spinning else -1)
+        draw(stdscr, view, cursor, status, scroll, tick)
         c = stdscr.getch()
+        if c == -1:
+            tick += 1
+            if time.time() - polled_at > SPOTLIGHT_POLL_S:
+                refresh_spotlight(spotlight)
+                polled_at = time.time()
+            continue
+        status = ""
         if c in (ord("q"), 27):
             return None
         if c in (curses.KEY_DOWN, ord("j")):
@@ -984,6 +1039,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
                 stdscr.clrtoeol()
                 stdscr.addnstr(h - 1, 0, ask[:w - 1], w - 1, curses.A_REVERSE)
                 stdscr.refresh()
+                stdscr.timeout(-1)
                 if stdscr.getch() not in (ord("y"), ord("Y")):
                     status = "disable all cancelled"
                     continue
@@ -1216,7 +1272,7 @@ def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
     return run_apply(sections, dry_run)
 
 
-VERSION = "0.9.0"
+VERSION = "0.10.0"
 
 HELP = f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services and the Spotlight index.
 
