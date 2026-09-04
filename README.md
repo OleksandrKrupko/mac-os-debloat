@@ -26,9 +26,11 @@ brew install OleksandrKrupko/debloat/debloat && debloat
 
 All three methods need `python3` — preinstalled with the Xcode Command Line Tools (`xcode-select --install` if it's missing). The curl one-liner pipes the script to `python3`, so it reopens `/dev/tty` for the interactive keys; if you have no terminal attached, use the non-interactive flags below or the `npx` launcher.
 
-![mac-os-debloat TUI — Spotlight row on top, 270 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
+![mac-os-debloat TUI — preset menu on top, then the Spotlight row and 270 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
 
-Every row is a checkbox: `[✓]` on, `[ ]` off. `space` flips the row under the cursor, `enter` applies. The bottom line always explains the row under the cursor — what the service does and what you lose with it off. The first row is Spotlight ([below](#spotlight)); everything after it is a launchd service.
+The top block is a menu: arrow onto `telemetry`, `balanced`, `Disable all` or `Enable all` and press `enter` to apply it right away. `Disable all` disappears once everything is off, `Enable all` once everything is on, so every row on offer does something.
+
+Everything below the menu is a checkbox: `[✓]` on, `[ ]` off. `space` flips the row under the cursor, `enter` applies whatever is ticked. The bottom line always explains the row under the cursor — what the service does and what you lose with it off. The first checkbox is Spotlight ([below](#spotlight)); everything after it is a launchd service.
 
 ## Commands
 
@@ -56,7 +58,7 @@ debloat --status --json    # machine-readable status
 
 Spotlight's indexer (`mds`, `mds_stores`, `mdworker`) opens every new or changed file on the disk, extracts its text and metadata, and writes that into an index. A `yarn install` or a fresh clone hands it thousands of files at once, which is why `mds_stores` spikes to gigabytes right after one. The index only serves Cmd-Space file search, Finder search and Mail/Notes search — and launchers like Alfred and Raycast that read it.
 
-The first TUI row turns it off and on. **Off** runs `mdutil -a -d`: indexing and search stop on every volume, the daemons go idle, and `find`, `grep`, `fd`, `ripgrep`, git and VS Code's search (its own bundled ripgrep) keep working exactly as before. **On** runs `mdutil -a -i on` plus `mdutil -a -E`, a full rebuild that costs 10-30 minutes of CPU. Off is the right setting if you search from your editor or the shell and never from Cmd-Space. `--restore` puts Spotlight back the way it was before your last apply, too.
+The Spotlight checkbox turns it off and on. **Off** runs `mdutil -a -d`: indexing and search stop on every volume, the daemons go idle, and `find`, `grep`, `fd`, `ripgrep`, git and VS Code's search (its own bundled ripgrep) keep working exactly as before. **On** runs `mdutil -a -i on` plus `mdutil -a -E`, a full rebuild that costs 10-30 minutes of CPU. Off is the right setting if you search from your editor or the shell and never from Cmd-Space. `--restore` puts Spotlight back the way it was before your last apply, too.
 
 `--status` reports `spotlight: on`, `off`, or `indexing` (rebuild in progress).
 
@@ -78,7 +80,7 @@ Neither preset touches Apple ID auth (`akd`, `appleaccountd`, `adid`, `AppSSODae
 
 98 labels sit between `balanced` and `--disable-all` — Safari, Photos, Music/TV/Books, Maps, Time Machine, Contacts/Calendar/Mail, Game Center, HomeKit, Screen Time, iCloud sync, print. Which of those you want is personal, so there's no preset for it: make your own.
 
-To turn something back on, use the TUI (`space` toggles an item, `enter` applies), `--restore`, or `--enable-all`.
+Every rung is also a row in the TUI's preset menu — arrow onto it, press `enter`. To turn something back on, use the TUI (`space` toggles an item, `enter` applies), the `Enable all` menu row, `--restore`, or `--enable-all`.
 
 ### Make your own preset
 
@@ -140,12 +142,11 @@ Full curated list with per-label comments lives inside the script (`EMBEDDED_LAB
 | `PgUp` / `PgDn` | jump 10 |
 | `[` / `]` | jump to prev / next section |
 | `space` | toggle the row under the cursor |
-| `a` / `n` | turn every row on / off |
-| `enter` | apply changes (prompts sudo) |
+| `enter` | on a preset menu row, apply that preset; anywhere else, apply the ticked changes (prompts sudo) |
 | `r` | reload state from system |
 | `q` / `esc` | quit |
 
-`[✓]` = on · `[ ]` = off · ` *` = changes on enter. The Spotlight row is toggled and applied like any other.
+`[✓]` = on · `[ ]` = off · ` *` = changes on enter. The Spotlight row is toggled and applied like any other. The preset menu rows carry no checkbox — `space` does nothing on them, `enter` runs them. `Disable all` asks for confirmation first.
 
 </details>
 

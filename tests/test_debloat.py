@@ -431,6 +431,54 @@ class CommandLineTest(FakeMachineTest):
         self.assertIn("disable  com.example.extra", out)
 
 
+class MenuTest(FakeMachineTest):
+    """The TUI preset menu: which rows it offers, and what enter on one ticks."""
+
+    def setUp(self):
+        super().setUp()
+        self.debloat.PRESETS_DIR = self.machine.tmp / "presets"
+        self.machine.add("com.example.telemetry", daemon_plist=True, registered=["system"])
+        self.machine.add("com.example.photos", daemon_plist=True, registered=["system"])
+        self.secs, _ = self.sections(
+            "# === Telemetry [telemetry] ===",
+            "com.example.telemetry  # analytics",
+            "# === Photos ===",
+            "com.example.photos     # photo analysis",
+        )
+
+    def rows(self):
+        self.debloat.refresh_state(self.secs)
+        return [it.action for it in self.debloat.menu_section(self.secs).items]
+
+    def test_disable_all_row_is_gone_once_everything_is_disabled(self):
+        """A row that cannot change anything is a dead end; `all()` flipped to
+        `any()` here leaves it on screen for every partly-disabled machine."""
+        self.assertIn("disable-all", self.rows())
+        self.machine.state["domains"]["system"]["disabled"] += [
+            "com.example.telemetry", "com.example.photos"]
+        self.machine.flush()
+        self.assertEqual(self.rows(), ["preset:telemetry", "preset:balanced", "enable-all"])
+
+    def test_enable_all_row_appears_as_soon_as_one_label_is_disabled(self):
+        """The panic button must not need every label disabled to show up."""
+        self.assertNotIn("enable-all", self.rows())
+        self.machine.state["domains"]["system"]["disabled"].append("com.example.photos")
+        self.machine.flush()
+        self.assertIn("enable-all", self.rows())
+
+    def test_preset_row_does_not_re_enable_a_label_outside_it(self):
+        """Same data loss `--preset` is guarded against, on the menu path: the
+        photos label the user had already turned off must stay off."""
+        self.machine.state["domains"]["system"]["disabled"].append("com.example.photos")
+        self.machine.flush()
+        self.debloat.refresh_state(self.secs)
+        self.debloat.select_for_action(self.secs, "preset:telemetry")
+        self.debloat.apply_changes(self.secs)
+        self.assertEqual(self.machine.commands(),
+                         ["disable system/com.example.telemetry",
+                          "bootout system/com.example.telemetry"])
+
+
 class SpotlightStateTest(FakeMachineTest):
     def test_disabled_with_mdutil_d_reads_as_off_not_rebuilding(self):
         """After `mdutil -a -d` the Data volume answers "unknown indexing state",
