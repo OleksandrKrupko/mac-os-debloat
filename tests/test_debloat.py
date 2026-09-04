@@ -81,6 +81,28 @@ open(state_path, "w").write(json.dumps(state))
 sys.exit(0)
 '''
 
+FAKE_MDUTIL = r'''#!/usr/bin/env python3
+import json, os, sys
+
+state_path = os.environ["DEBLOAT_FAKE_STATE"]
+state = json.loads(open(state_path).read())
+argv = sys.argv[1:]
+with open(state["log"], "a") as log:
+    log.write("mdutil " + " ".join(argv) + "\n")
+
+if argv[0] == "-s":
+    print(f"{argv[1]}:\n\t{state['spotlight'][argv[1]]}")
+    sys.exit(0)
+if argv == ["-a", "-d"]:
+    state["spotlight"] = {"/": "Indexing and searching disabled.",
+                          "/System/Volumes/Data": "Error: unknown indexing state."}
+elif argv == ["-a", "-i", "on"]:
+    state["spotlight"] = {"/": "Indexing enabled.",
+                          "/System/Volumes/Data": "Indexing enabled."}
+open(state_path, "w").write(json.dumps(state))
+sys.exit(0)
+'''
+
 FAKE_SUDO = '#!/bin/sh\n[ "$1" = "-v" ] && exit 0\nexec "$@"\n'
 
 
@@ -111,6 +133,8 @@ class FakeMachine:
             "log": str(self.log),
             "overrides_land": True,
             "fail": {},
+            "spotlight": {"/": "Indexing enabled.",
+                          "/System/Volumes/Data": "Indexing enabled."},
             "domains": {
                 "system": {"services": {}, "disabled": []},
                 self.gui: {"services": {}, "disabled": []},
@@ -118,7 +142,8 @@ class FakeMachine:
         }
         bindir = tmp / "bin"
         bindir.mkdir()
-        for name, body in (("launchctl", FAKE_LAUNCHCTL), ("sudo", FAKE_SUDO)):
+        for name, body in (("launchctl", FAKE_LAUNCHCTL), ("sudo", FAKE_SUDO),
+                           ("mdutil", FAKE_MDUTIL)):
             path = bindir / name
             path.write_text(body)
             path.chmod(path.stat().st_mode | stat.S_IXUSR)
@@ -152,7 +177,7 @@ class FakeMachine:
 
     def commands(self) -> list[str]:
         return [l for l in self.log.read_text().splitlines()
-                if not l.startswith(("print ", "print-disabled "))]
+                if not l.startswith(("print ", "print-disabled ", "mdutil -s "))]
 
     def reread(self):
         self.state = json.loads(self.state_path.read_text())
@@ -322,7 +347,6 @@ class CommandLineTest(FakeMachineTest):
         self.debloat.PRESETS_DIR = self.debloat.BACKUP_DIR / "presets"
         self.debloat.USER_LABELS_FILE = self.debloat.BACKUP_DIR / "labels.txt"
         self.debloat.PRESETS_DIR.mkdir(parents=True)
-        self.debloat.spotlight_state = lambda: "off"
         self.debloat.mem_free_mb = lambda: 4096
 
     def run_cli(self, *argv) -> tuple[int, str]:
@@ -388,6 +412,16 @@ class CommandLineTest(FakeMachineTest):
         self.assertEqual(code, 0)
         self.assertIn("preset mine: 2 labels", out)
 
+    def test_restore_turns_spotlight_back_on_when_the_apply_turned_it_off(self):
+        self.two_labels()
+        self.run_cli("--disable-all")
+        self.machine.reread()
+        self.machine.state["spotlight"] = {"/": "Indexing and searching disabled.",
+                                           "/System/Volumes/Data": "Error: unknown indexing state."}
+        self.machine.flush()
+        self.run_cli("--restore")
+        self.assertEqual(self.machine.commands()[-2:], ["mdutil -a -i on", "mdutil -a -E"])
+
     def test_user_labels_file_extends_the_catalog(self):
         self.two_labels()
         self.debloat.USER_LABELS_FILE.write_text("com.example.extra  # mine\n")
@@ -395,6 +429,23 @@ class CommandLineTest(FakeMachineTest):
         code, out = self.run_cli("--disable-all", "--dry-run")
         self.assertEqual(code, 0)
         self.assertIn("disable  com.example.extra", out)
+
+
+class SpotlightStateTest(FakeMachineTest):
+    def test_disabled_with_mdutil_d_reads_as_off_not_rebuilding(self):
+        """After `mdutil -a -d` the Data volume answers "unknown indexing state",
+        the same text a wiped index gives while it rebuilds; only `/` says
+        disabled. Reading Data reported a switched-off Spotlight as INDEXING."""
+        self.machine.state["spotlight"] = {"/": "Indexing and searching disabled.",
+                                           "/System/Volumes/Data": "Error: unknown indexing state."}
+        self.machine.flush()
+        self.assertEqual(self.debloat.spotlight_state(), "off")
+
+    def test_rebuilding_index_reads_as_indexing(self):
+        self.machine.state["spotlight"] = {"/": "Error: unknown indexing state.",
+                                           "/System/Volumes/Data": "Error: unknown indexing state."}
+        self.machine.flush()
+        self.assertEqual(self.debloat.spotlight_state(), "indexing")
 
 
 class DomainStateParseTest(unittest.TestCase):
