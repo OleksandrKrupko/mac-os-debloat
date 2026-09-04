@@ -30,7 +30,7 @@ All three methods need `python3` — preinstalled with the Xcode Command Line To
 
 The top block is a menu: arrow onto `telemetry`, `balanced`, `Disable all` or `Enable all` and press `enter` to apply it right away. `Disable all` disappears once everything is off, `Enable all` once everything is on, so every row on offer does something.
 
-Everything below the menu is a checkbox: `[✓]` on, `[ ]` off. `space` flips the row under the cursor, `enter` applies whatever is ticked. The bottom line always explains the row under the cursor — what the service does and what you lose with it off. The first checkbox is Spotlight ([below](#spotlight)); everything after it is a launchd service.
+Everything below the menu is a checkbox: `[✓]` on, `[ ]` off, `[▘]` spinning while the system is still settling into the state you asked for. `space` flips the row under the cursor, `enter` applies whatever is ticked. The bottom line always explains the row under the cursor — what the service does and what you lose with it off. The first checkbox is Spotlight ([below](#spotlight)); everything after it is a launchd service.
 
 ## Commands
 
@@ -50,6 +50,8 @@ debloat --dry-run          # with --preset/--disable-all/--enable-all: preview o
 debloat --status --json    # machine-readable status
 ```
 
+An apply is two `sudo launchctl` calls per label per domain, so `--disable-all` runs several hundred of them; it prints a `disabling 137/268 com.apple.…` line in place while it works, on the command line and in the TUI alike. Piped output gets none of that.
+
 `--status`, `--audit`, `--list`, and `--dry-run` need no sudo — reading launchd state is unprivileged. Every apply first snapshots your current state to `~/.mac-os-debloat/latest.json`, so `--restore` always brings you back. If anything feels off, `debloat --enable-all` turns it all back on.
 
 ## Spotlight
@@ -59,6 +61,8 @@ debloat --status --json    # machine-readable status
 Spotlight's indexer (`mds`, `mds_stores`, `mdworker`) opens every new or changed file on the disk, extracts its text and metadata, and writes that into an index. A `yarn install` or a fresh clone hands it thousands of files at once, which is why `mds_stores` spikes to gigabytes right after one. The index only serves Cmd-Space file search, Finder search and Mail/Notes search — and launchers like Alfred and Raycast that read it.
 
 The Spotlight checkbox turns it off and on. **Off** runs `mdutil -a -d`: indexing and search stop on every volume, the daemons go idle, and `find`, `grep`, `fd`, `ripgrep`, git and VS Code's search (its own bundled ripgrep) keep working exactly as before. **On** runs `mdutil -a -i on` plus `mdutil -a -E`, a full rebuild that costs 10-30 minutes of CPU. Off is the right setting if you search from your editor or the shell and never from Cmd-Space. `--restore` puts Spotlight back the way it was before your last apply, too.
+
+Turning it **on** is not instant: `mdutil -a -E` wipes the store and the rebuild runs for 10-30 minutes. During that window `mdutil` reports neither on nor off, so the row shows a spinner instead of a checkbox and the bottom line says what is happening. The TUI re-checks every 3 seconds and the row settles to `[✓]` on its own — you can keep working, or quit; quitting does not stop the rebuild. Tick the row and press `enter` during the rebuild and your pending `*` takes the spinner's place, so a change you asked for is never hidden by it.
 
 `--status` reports `spotlight: on`, `off`, or `indexing` (rebuild in progress).
 
@@ -146,7 +150,7 @@ Full curated list with per-label comments lives inside the script (`EMBEDDED_LAB
 | `r` | reload state from system |
 | `q` / `esc` | quit |
 
-`[✓]` = on · `[ ]` = off · ` *` = changes on enter. The Spotlight row is toggled and applied like any other. The preset menu rows carry no checkbox — `space` does nothing on them, `enter` runs them. `Disable all` asks for confirmation first.
+`[✓]` = on · `[ ]` = off · `[▘]` = the system is still settling into the state you asked for · ` *` = changes on enter. The Spotlight row is toggled and applied like any other. The preset menu rows carry no checkbox — `space` does nothing on them, `enter` runs them. `Disable all` asks for confirmation first.
 
 </details>
 

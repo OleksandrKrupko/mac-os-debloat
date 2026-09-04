@@ -496,6 +496,46 @@ class SpotlightStateTest(FakeMachineTest):
         self.assertEqual(self.debloat.spotlight_state(), "indexing")
 
 
+class SpotlightRowTest(FakeMachineTest):
+    def test_rebuilding_index_is_a_third_row_state_not_a_ticked_box(self):
+        """The row is tri-state: collapsing it back to `disabled` bool alone
+        loses the rebuild, and the row reads as plainly on while mds churns."""
+        section = self.debloat.spotlight_section()
+        item = section.items[0]
+        self.assertEqual(item.state, "on")
+        self.assertEqual(item.comment, self.debloat.SPOTLIGHT_COMMENT)
+
+        self.machine.state["spotlight"]["/"] = "Error: unknown indexing state."
+        self.machine.flush()
+        self.debloat.refresh_spotlight(section)
+        self.assertEqual(item.state, "indexing")
+        self.assertFalse(item.disabled)
+        self.assertEqual(item.comment, self.debloat.SPOTLIGHT_INDEXING)
+
+
+class ProgressTest(unittest.TestCase):
+    def test_nothing_is_written_when_stdout_is_not_a_terminal(self):
+        """The in-place line is \\r padding; letting it reach a pipe fills a
+        scripted `--disable-all` log with control characters."""
+        debloat = load_debloat()
+        piped = io.StringIO()
+        with contextlib.redirect_stdout(piped):
+            debloat.progress("  disabling  1/9  com.example.thing")
+        self.assertEqual(piped.getvalue(), "")
+
+        tty = io.StringIO()
+        tty.isatty = lambda: True
+        original = os.get_terminal_size
+        os.get_terminal_size = lambda *a: os.terminal_size((120, 40))
+        try:
+            with contextlib.redirect_stdout(tty):
+                debloat.progress("  disabling  1/9  com.example.thing")
+        finally:
+            os.get_terminal_size = original
+        self.assertEqual(tty.getvalue(),
+                         "\r" + "  disabling  1/9  com.example.thing".ljust(78) + "\r")
+
+
 class DomainStateParseTest(unittest.TestCase):
     """`launchctl print <domain>` output, verbatim shape, with the neighbouring
     blocks that must not leak into either set."""
