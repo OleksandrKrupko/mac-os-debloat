@@ -2,7 +2,7 @@
 
 **Debloat your Mac from the terminal. Zero dependencies. Zero install.**
 
-Interactive console util to disable 270 non-essential macOS launchd services — Siri, Apple Intelligence, telemetry, ads, and the Apple apps you don't use. Frees ~1.5-2 GB of RAM on a 16 GB M4 ([how that was measured](#why)). Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon. Verify with `debloat --status`, which reports what is actually in effect and how many of the services are running right now — including after a reboot ([see below](#persistence)).
+Interactive console util to disable 270 non-essential macOS launchd services — Siri, Apple Intelligence, telemetry, ads, and the Apple apps you don't use — plus the Spotlight file index. Frees ~1.5-2 GB of RAM on a 16 GB M4 ([how that was measured](#why)). Fully reversible. Built for macOS Tahoe 26.x on Apple Silicon. Verify with `debloat --status`, which reports what is actually in effect and how many of the services are running right now — including after a reboot ([see below](#persistence)).
 
 **The desktop is not touched.** Nothing here disables WindowServer, Finder, Dock, Control Center, audio, networking, Wi-Fi, security or your own apps — those labels are not in the catalog at all, at any setting. Even `--disable-all` leaves you with a normal, fully working Mac; what it costs you is listed [below](#presets).
 
@@ -26,7 +26,9 @@ brew install OleksandrKrupko/debloat/debloat && debloat
 
 All three methods need `python3` — preinstalled with the Xcode Command Line Tools (`xcode-select --install` if it's missing). The curl one-liner pipes the script to `python3`, so it reopens `/dev/tty` for the interactive keys; if you have no terminal attached, use the non-interactive flags below or the `npx` launcher.
 
-![mac-os-debloat TUI — 270 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
+![mac-os-debloat TUI — Spotlight row on top, 270 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
+
+Every row is a checkbox: `[✓]` on, `[ ]` off. `space` flips the row under the cursor, `enter` applies. The bottom line always explains the row under the cursor — what the service does and what you lose with it off. The first row is Spotlight ([below](#spotlight)); everything after it is a launchd service.
 
 ## Commands
 
@@ -47,6 +49,16 @@ debloat --status --json    # machine-readable status
 ```
 
 `--status`, `--audit`, `--list`, and `--dry-run` need no sudo — reading launchd state is unprivileged. Every apply first snapshots your current state to `~/.mac-os-debloat/latest.json`, so `--restore` always brings you back. If anything feels off, `debloat --enable-all` turns it all back on.
+
+## Spotlight
+
+<a name="spotlight"></a>
+
+Spotlight's indexer (`mds`, `mds_stores`, `mdworker`) opens every new or changed file on the disk, extracts its text and metadata, and writes that into an index. A `yarn install` or a fresh clone hands it thousands of files at once, which is why `mds_stores` spikes to gigabytes right after one. The index only serves Cmd-Space file search, Finder search and Mail/Notes search — and launchers like Alfred and Raycast that read it.
+
+The first TUI row turns it off and on. **Off** runs `mdutil -a -d`: indexing and search stop on every volume, the daemons go idle, and `find`, `grep`, `fd`, `ripgrep`, git and VS Code's search (its own bundled ripgrep) keep working exactly as before. **On** runs `mdutil -a -i on` plus `mdutil -a -E`, a full rebuild that costs 10-30 minutes of CPU. Off is the right setting if you search from your editor or the shell and never from Cmd-Space. `--restore` puts Spotlight back the way it was before your last apply, too.
+
+`--status` reports `spotlight: on`, `off`, or `indexing` (rebuild in progress).
 
 ## Presets
 
@@ -124,19 +136,16 @@ Full curated list with per-label comments lives inside the script (`EMBEDDED_LAB
 
 | Key | Action |
 |-----|--------|
-| `↑` / `↓` or `j` / `k` | navigate |
+| `↑` / `↓` or `j` / `k` | move |
 | `PgUp` / `PgDn` | jump 10 |
 | `[` / `]` | jump to prev / next section |
-| `space` | toggle current item |
-| `x` | toggle whole section under cursor |
-| `s` / `S` | uncheck / check whole section |
-| `a` / `n` | check / uncheck all |
-| `p` | toggle Spotlight indexing on root volume |
+| `space` | toggle the row under the cursor |
+| `a` / `n` | turn every row on / off |
 | `enter` | apply changes (prompts sudo) |
 | `r` | reload state from system |
 | `q` / `esc` | quit |
 
-`[✓]` = enabled · `[ ]` = disabled · ` *` = unsaved change
+`[✓]` = on · `[ ]` = off · ` *` = changes on enter. The Spotlight row is toggled and applied like any other.
 
 </details>
 
@@ -211,11 +220,21 @@ The `reclaimable RAM` line in `--status` is not a prediction of that gain: it's 
 </details>
 
 <details>
+<summary><b>Extras</b></summary>
+
+Two shell scripts in [`extras/`](extras) are not part of the TUI:
+
+- `disable-animations.sh` / `enable-animations.sh` — reduce motion and transparency (the Liquid Glass memory-leak workaround on Tahoe), zero Dock/window/Finder animation durations, restart Dock and Finder. `defaults write` only, no sudo, fully reversible with the enable script.
+- `disable-spotlight.sh` / `enable-spotlight.sh` — the Spotlight toggle as a standalone script for setups that never open the TUI. Same `mdutil -a -d` / `-i on` + `-E` as the TUI row; the disable script also erases the existing index to reclaim its disk space.
+
+</details>
+
+<details>
 <summary><b>Comparison</b></summary>
 
 | Tool | Console UI | Curated list | Persistent | No SIP disable | Zero install |
 |------|-----------|--------------|------------|----------------|--------------|
-| **mac-os-debloat** | ✓ | ✓ 270 labels | `launchctl disable` + verified per domain ([caveat](#persistence)) | ✓ | ✓ Python stdlib |
+| **mac-os-debloat** | ✓ | ✓ 270 labels + Spotlight | `launchctl disable` + verified per domain ([caveat](#persistence)) | ✓ | ✓ Python stdlib |
 | [launchtui](https://github.com/macournoyer/launchtui) | ✓ | ✗ generic | ✗ bootout only | ✓ | ✗ `cargo install` |
 | [Silverback-Debloater](https://github.com/Wamphyre/macOS_Silverback-Debloater) | ✗ | ✓ | ✓ | ✓ | ✗ Intel-desktop only |
 | [b0gdanw Tahoe gist](https://gist.github.com/b0gdanw/0c20c2fd5d0a7e6cff01849b57108967) | ✗ | ✓ | ✓ | ✗ needs SIP off | gist copy |
@@ -225,6 +244,6 @@ The `reclaimable RAM` line in `--status` is not a prediction of that gain: it's 
 
 ---
 
-MIT · macOS Tahoe 26.x · Apple Silicon · Python 3.10+ (ships with Xcode CLT)
+MIT · macOS Tahoe 26.x · Apple Silicon · Python 3.9+ (the Xcode CLT ship 3.9.6)
 
 **Keywords:** macOS debloat, macOS Tahoe debloat, Apple Silicon debloat, disable Apple Intelligence, disable Siri permanently, launchctl disable, free RAM macOS, mac performance mode, macOS privacy, kill Apple telemetry, macOS service manager, launchd console util, contextstored memory leak, Tahoe RAM usage, Apple Intelligence disable launchctl.
