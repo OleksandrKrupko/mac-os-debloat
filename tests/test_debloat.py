@@ -578,5 +578,180 @@ system = {
         self.assertEqual(disabled, {"com.apple.tipsd"})
 
 
+class CatalogStatsTest(unittest.TestCase):
+    """Catalog sizes are counted from EMBEDDED_LABELS. A literal 270 in help,
+    README or package.json is how that number goes stale the next time a
+    label is added."""
+
+    def setUp(self):
+        self.debloat = load_debloat()
+
+    def test_stats_match_a_fresh_parse_of_embedded_labels(self):
+        stats = self.debloat.catalog_stats()
+        sections = self.debloat.parse_labels(self.debloat.EMBEDDED_LABELS)
+        self.assertEqual(stats.total, sum(len(s.items) for s in sections))
+        self.assertEqual(stats.sections, len(sections))
+        self.assertLess(stats.telemetry, stats.balanced)
+        self.assertLess(stats.balanced, stats.total)
+        self.assertEqual(stats.beyond_balanced, stats.total - stats.balanced)
+
+    def test_adding_a_label_changes_the_count(self):
+        before = self.debloat.catalog_stats()
+        self.debloat.EMBEDDED_LABELS += (
+            "\n# === Extra [balanced] ===\ncom.example.extra  # x\n")
+        after = self.debloat.catalog_stats()
+        self.assertEqual(after.total, before.total + 1)
+        self.assertEqual(after.balanced, before.balanced + 1)
+        self.assertEqual(after.telemetry, before.telemetry)
+
+    def test_help_interpolates_stats_rather_than_a_literal(self):
+        self.debloat.EMBEDDED_LABELS = (
+            "# === Telemetry [telemetry] ===\ncom.example.a  # a\n"
+            "# === Siri [balanced] ===\ncom.example.b  # b\n"
+            "# === Photos ===\ncom.example.c  # c\n"
+        )
+        text = self.debloat.help_text()
+        self.assertIn("Catalog: 3 labels in 3 sections", text)
+        self.assertIn("telemetry   1 labels", text)
+        self.assertIn("balanced    2 labels", text)
+        self.assertIn("disable-all 3 labels", text)
+
+    def test_readme_counts_match_the_catalog(self):
+        """CI: extras/sync-readme.py --check. Adding a label without running
+        the script must fail here, not ship a README that still says 270."""
+        stale = self.debloat.sync_docs(REPO, check=True)
+        self.assertEqual(stale, [], "run python3 extras/sync-readme.py")
+
+    def test_sync_docs_rewrites_a_stale_marker(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        tmp = Path(tmpdir.name)
+        (tmp / "README.md").write_text(
+            "\n".join([
+                "Interactive console util to disable 1 non-essential",
+                "Spotlight row and 1 launchd services grouped",
+                "beta enrollment (1)",
+                "iMessage, Family (1)",
+                "disabling 137/1 com.apple",
+                "| `--preset telemetry` | 1 | nothing",
+                "| `--preset balanced` | 1 | Siri",
+                "| `--disable-all` | 1 | balanced",
+                "bridgeOS — 1 labels",
+                "1 labels sit between",
+                "1 labels across 1 sections",
+                "Siri / voice assistant (1)",
+                "Apple Intelligence — Tahoe (1)",
+                "More AI / Apple Intelligence (1)",
+                "Diagnostics extras (1)",
+                "AMP) suite (1)",
+                "Media streaming (1)",
+                "Safari + Safari extras (1)",
+                "Game Center + game controllers (1)",
+                "Family / Parental controls (1)",
+                "Beta program enrollment (1)",
+                "iMessage / FaceTime / phone relay (1)",
+                "Reminders + AddressBook (1)",
+                "AirPlay / Continuity Capture (1)",
+                "✓ 1 labels + Spotlight",
+                "",
+            ]))
+        (tmp / "package.json").write_text(
+            '{"description": "disable 1 non-essential macOS"}\n')
+        stale = self.debloat.sync_docs(tmp)
+        self.assertEqual(stale, ["README.md", "package.json"])
+        total = str(self.debloat.catalog_stats().total)
+        readme = (tmp / "README.md").read_text()
+        self.assertIn(f"disable {total} non-essential", readme)
+        self.assertNotIn("<!--n:", readme)
+        self.assertIn(f"disable {total} non-essential",
+                      (tmp / "package.json").read_text())
+        self.assertEqual(self.debloat.sync_docs(tmp, check=True), [])
+
+    def test_campo_is_app_launcher_not_an_ai_preset(self):
+        """campo hosts Cmd-Space on 27. Keep it listed so you can still turn
+        it off, but it is how you launch apps — not Siri — and balanced
+        must not take it."""
+        found = None
+        for sec in self.debloat.parse_labels(self.debloat.EMBEDDED_LABELS):
+            for it in sec.items:
+                if it.label == "com.apple.campo":
+                    found = (sec, it)
+                    break
+        self.assertIsNotNone(found, "com.apple.campo must stay in the catalog")
+        sec, it = found
+        self.assertEqual(sec.preset, "")
+        title = sec.title.lower()
+        self.assertNotIn("siri", title)
+        self.assertNotIn("intelligence", title)
+        self.assertNotRegex(title, r"\bai\b")
+        self.assertIn("cmd-space", it.comment.lower())
+
+
+class MacosGateTest(unittest.TestCase):
+    def setUp(self):
+        self.debloat = load_debloat()
+
+    def test_gte_hides_keepalive_on_tahoe(self):
+        self.assertTrue(self.debloat.macos_matches(">=27", 27))
+        self.assertFalse(self.debloat.macos_matches(">=27", 26))
+        self.assertTrue(self.debloat.macos_matches("macos>=27", 27))
+
+    def test_section_header_keeps_balanced_and_macos_tags(self):
+        src = """\
+# === Spotlight KeepAlive [macos>=27] ===
+com.apple.metadata.mds                        # server
+# === Siri / voice [balanced] ===
+com.apple.assistantd                          # siri
+"""
+        secs = self.debloat.parse_labels(src)
+        self.assertEqual(secs[0].macos, ">=27")
+        self.assertEqual(secs[0].preset, "")
+        self.assertEqual(secs[1].preset, "balanced")
+        self.assertEqual(secs[1].macos, "")
+
+    def test_drop_keepalive_section_on_26(self):
+        src = """\
+# === Spotlight KeepAlive [macos>=27] ===
+com.apple.metadata.mds                        # server
+com.apple.corespotlightd                      # cs
+# === Siri / voice [balanced] ===
+com.apple.assistantd                          # siri
+"""
+        secs = self.debloat.parse_labels(src)
+        skipped = self.debloat.drop_wrong_macos(secs, major=26)
+        self.assertEqual(skipped, ["com.apple.metadata.mds", "com.apple.corespotlightd"])
+        self.assertEqual([s.title for s in secs], ["Siri / voice"])
+
+    def test_keep_keepalive_section_on_27(self):
+        src = """\
+# === Spotlight KeepAlive [macos>=27] ===
+com.apple.metadata.mds                        # server
+"""
+        secs = self.debloat.parse_labels(src)
+        skipped = self.debloat.drop_wrong_macos(secs, major=27)
+        self.assertEqual(skipped, [])
+        self.assertEqual(len(secs[0].items), 1)
+
+    def test_catalog_gates_keepalive_not_apple_intelligence(self):
+        """KeepAlive mds is 27-only; the AI labels next to it stay in balanced."""
+        secs = self.debloat.parse_labels(self.debloat.EMBEDDED_LABELS)
+        gated = [s for s in secs if s.macos == ">=27"]
+        self.assertEqual(len(gated), 1)
+        ka = [it.label for it in gated[0].items]
+        self.assertIn("com.apple.metadata.mds", ka)
+        self.assertIn("com.apple.corespotlightd", ka)
+        self.assertNotIn("com.apple.callintelligenced", ka)
+        self.assertEqual(len(ka), 10)
+        self.assertNotIn("com.apple.Spotlight", ka)
+        speech = [it.label for s in secs if "Speech" in s.title for it in s.items]
+        self.assertIn("com.apple.speech.speechsynthesisd.arm64", speech)
+        self.assertIn("com.apple.speech.speechsynthesisd.x86_64", speech)
+        skipped = self.debloat.drop_wrong_macos(
+            self.debloat.parse_labels(self.debloat.EMBEDDED_LABELS), major=26)
+        self.assertIn("com.apple.metadata.mds", skipped)
+        self.assertNotIn("com.apple.callintelligenced", skipped)
+        self.assertNotIn("com.apple.speech.speechsynthesisd.x86_64", skipped)
+
+
 if __name__ == "__main__":
     unittest.main()

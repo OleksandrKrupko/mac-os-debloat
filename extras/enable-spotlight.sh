@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Re-enable macOS Spotlight indexing (revert disable-spotlight.sh).
+# mdutil only — does not launchctl-enable KeepAlive mds / corespotlightd.
 # Will trigger a full reindex — heavy CPU + RAM for ~10-30 min after.
 set -e
 
