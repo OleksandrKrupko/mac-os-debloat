@@ -1,0 +1,396 @@
+#!/usr/bin/env python3
+"""End-to-end tests: debloat on real macOS, inside throwaway tart VMs.
+
+The unit tests fake `launchctl`. These run Apple's own launchd with SIP on,
+through real reboots and cold boots, so a report like "overrides don't survive
+a reboot" is either reproduced or disproved with evidence. Every scenario runs
+on a fresh copy-on-write clone of a prepared base image, and every run writes
+its evidence (launchctl state, override stores, launchd's boot log) as JSON.
+
+  python3 tests/e2e.py prepare --os 26.5          once per macOS version
+  python3 tests/e2e.py run reboot --os 26.5
+  python3 tests/e2e.py run all --os 26.5 --preset balanced --out /tmp/e2e
+
+Needs an Apple Silicon Mac with tart (https://tart.run) on PATH. The VM's
+hardware is virtual (no battery, Bluetooth, Touch ID), so a label whose job
+only loads on real hardware shows up as unregistered and is not judged.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+IMAGES = {
+    "26.5": "ghcr.io/cirruslabs/macos-tahoe-vanilla:26.5",
+    "27.0": "ghcr.io/cirruslabs/macos-golden-gate-vanilla:27.0",
+}
+SCENARIOS = ("apply", "restore", "reboot", "poweroff")
+GUEST_USER = "admin"
+GUEST_PASSWORD = "admin"
+GUEST_DEBLOAT = "/Users/admin/debloat"
+GUEST_PROBE = "/Users/admin/probe.py"
+
+# Reads launchd's own state for the given labels — deliberately not debloat's
+# code, so a bug in debloat's domain logic can't hide in its own verdict.
+PROBE = r'''
+import json, subprocess, sys
+labels = json.loads(sys.stdin.read())
+uid = subprocess.run(["id", "-u"], capture_output=True, text=True).stdout.strip()
+domains = ["system", f"gui/{uid}"]
+
+def run(*argv):
+    return subprocess.run(argv, capture_output=True, text=True).stdout
+
+def block(text, header):
+    rows, inside = [], False
+    for line in text.splitlines():
+        if line.strip() == header + " = {":
+            inside = True
+        elif inside and line.strip() == "}":
+            break
+        elif inside:
+            rows.append(line.strip())
+    return rows
+
+services, disabled = {}, {}
+for d in domains:
+    printed = run("launchctl", "print", d)
+    services[d] = {}
+    for row in block(printed, "services"):
+        parts = row.split()
+        if len(parts) >= 3 and parts[0].lstrip("-").isdigit():
+            services[d][parts[-1]] = int(parts[0])
+    disabled[d] = set()
+    for row in block(run("launchctl", "print-disabled", d), "disabled services"):
+        name, _, state = row.partition("=>")
+        if state.strip() in ("disabled", "true"):
+            disabled[d].add(name.strip().strip('"'))
+
+out = {}
+for label in labels:
+    registered = [d for d in domains if label in services[d]]
+    out[label] = {
+        "registered": registered,
+        "disabled_in": [d for d in domains if label in disabled[d]],
+        "pid": max([services[d][label] for d in registered] or [0]),
+    }
+print(json.dumps({
+    "uid": uid,
+    "boottime": run("sysctl", "-n", "kern.boottime").strip(),
+    "labels": out,
+}))
+'''
+
+
+def log(msg: str) -> None:
+    print(f"[e2e {time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def tart(*argv: str, check: bool = True, timeout: float | None = None) -> str:
+    r = subprocess.run(["tart", *argv], capture_output=True, text=True, timeout=timeout)
+    if check and r.returncode != 0:
+        raise RuntimeError(f"tart {' '.join(argv)} failed: {r.stderr.strip() or r.stdout.strip()}")
+    return r.stdout.strip()
+
+
+class VM:
+    def __init__(self, name: str, workdir: Path):
+        self.name = name
+        self.workdir = workdir
+        self.proc: subprocess.Popen | None = None
+        self.ip = ""
+        askpass = workdir / "askpass.sh"
+        askpass.write_text(f"#!/bin/sh\necho {GUEST_PASSWORD}\n")
+        askpass.chmod(0o700)
+        self.env = {**os.environ, "SSH_ASKPASS": str(askpass), "SSH_ASKPASS_REQUIRE": "force",
+                    "DISPLAY": ":0"}
+
+    def start(self) -> None:
+        runlog = open(self.workdir / f"{self.name}.run.log", "a")
+        self.proc = subprocess.Popen(["tart", "run", "--no-graphics", self.name],
+                                     stdout=runlog, stderr=runlog, start_new_session=True)
+        self.ip = tart("ip", self.name, "--wait", "300")
+        self.wait_ssh(timeout=300)
+
+    def wait_ssh(self, timeout: float) -> None:
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.sh("true", check=False, timeout=15).returncode == 0:
+                return
+            time.sleep(3)
+        raise RuntimeError(f"ssh to {self.name} ({self.ip}) did not come up in {timeout:.0f}s")
+
+    def sh(self, cmd: str, check: bool = True, stdin: str | None = None,
+           timeout: float = 600) -> subprocess.CompletedProcess:
+        argv = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=5", "-o", "PubkeyAuthentication=no",
+                "-o", "PreferredAuthentications=password,keyboard-interactive",
+                f"{GUEST_USER}@{self.ip}", cmd]
+        try:
+            r = subprocess.run(argv, input=stdin, capture_output=True, text=True,
+                               env=self.env, stdin=None if stdin is not None else subprocess.DEVNULL,
+                               timeout=timeout)
+        except subprocess.TimeoutExpired:
+            if check:
+                raise
+            return subprocess.CompletedProcess(argv, 255, "", "timeout")
+        if check and r.returncode != 0:
+            raise RuntimeError(f"guest `{cmd}` exited {r.returncode}: {r.stderr.strip()[-2000:]}")
+        return r
+
+    def boottime(self) -> str:
+        return self.sh("sysctl -n kern.boottime").stdout.strip()
+
+    def reboot(self) -> str:
+        before = self.boottime()
+        self.sh("sudo shutdown -r now", check=False, timeout=20)
+        deadline = time.time() + 600
+        while time.time() < deadline:
+            time.sleep(5)
+            if self.proc is not None and self.proc.poll() is not None:
+                log("tart run exited on guest reboot; starting the VM again")
+                self.start()
+            r = self.sh("sysctl -n kern.boottime", check=False, timeout=15)
+            if r.returncode == 0 and r.stdout.strip() and r.stdout.strip() != before:
+                self.wait_ssh(timeout=120)
+                return r.stdout.strip()
+        raise RuntimeError("guest did not come back from reboot in 600s")
+
+    def poweroff_and_boot(self) -> str:
+        self.sh("sudo shutdown -h now", check=False, timeout=20)
+        if self.proc is not None:
+            self.proc.wait(timeout=300)
+        self.start()
+        return self.boottime()
+
+    def stop(self) -> None:
+        if self.proc is None or self.proc.poll() is not None:
+            return
+        tart("stop", self.name, "--timeout", "30", check=False, timeout=90)
+        try:
+            self.proc.wait(timeout=60)
+        except subprocess.TimeoutExpired:
+            os.killpg(self.proc.pid, signal.SIGKILL)
+            self.proc.wait()
+
+
+def base_name(os_version: str) -> str:
+    return f"debloat-e2e-base-{os_version}"
+
+
+def local_vms() -> set[str]:
+    rows = json.loads(tart("list", "--format", "json"))
+    return {r["Name"] for r in rows if r.get("Source") == "local"}
+
+
+def cmd_prepare(os_version: str, workdir: Path) -> int:
+    base = base_name(os_version)
+    if base in local_vms():
+        log(f"{base} already exists; `tart delete {base}` to rebuild it")
+        return 0
+    log(f"cloning {IMAGES[os_version]} (first pull downloads ~25-50 GB)")
+    tart("clone", IMAGES[os_version], base)
+    vm = VM(base, workdir)
+    try:
+        vm.start()
+        if vm.sh("xcode-select -p", check=False).returncode != 0:
+            log("installing Command Line Tools for python3")
+            vm.sh("touch /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress")
+            label = vm.sh("softwareupdate -l 2>&1 | sed -n 's/^\\* Label: \\(Command Line Tools.*\\)$/\\1/p'"
+                          " | sort -V | tail -1").stdout.strip()
+            if not label:
+                raise RuntimeError("softwareupdate lists no Command Line Tools package")
+            vm.sh(f"sudo softwareupdate -i '{label}' --agree-to-license", timeout=3600)
+        vm.sh("python3 -c 'import sys; assert sys.version_info >= (3, 9)'")
+        vm.sh("sudo softwareupdate --schedule off", check=False)
+        # The image's NOPASSWD rule sits beside %admin's password rule, and `sudo -v`
+        # (debloat's first step) only skips the prompt when every matching rule is NOPASSWD.
+        vm.sh("echo 'Defaults verifypw=any' | sudo tee /etc/sudoers.d/zz-e2e-verifypw >/dev/null"
+              " && sudo chmod 440 /etc/sudoers.d/zz-e2e-verifypw && sudo -n -v")
+        log(f"guest: {vm.sh('sw_vers -productVersion').stdout.strip()}, "
+            f"{vm.sh('python3 --version').stdout.strip()}, "
+            f"{vm.sh('csrutil status').stdout.strip()}")
+        vm.sh("sudo shutdown -h now", check=False, timeout=20)
+        vm.proc.wait(timeout=300)
+    except BaseException:
+        vm.stop()
+        tart("delete", base, check=False)
+        raise
+    log(f"base image ready: {base}")
+    return 0
+
+
+def snapshot(vm: VM, labels: list[str], step: str) -> dict:
+    probe = json.loads(vm.sh(f"python3 {GUEST_PROBE}", stdin=json.dumps(labels)).stdout)
+    uid = probe["uid"]
+    stores = {}
+    for name in ("disabled.plist", f"disabled.{uid}.plist"):
+        path = f"/private/var/db/com.apple.xpc.launchd/{name}"
+        r = vm.sh(f"sudo plutil -convert json -o - {path}", check=False)
+        stores[name] = json.loads(r.stdout) if r.returncode == 0 else None
+    status = json.loads(vm.sh(f"python3 {GUEST_DEBLOAT} --status --json").stdout)
+    return {"step": step, "probe": probe, "stores": stores, "status": status}
+
+
+def boot_log(vm: VM) -> list[str]:
+    # Full path: zsh in the guest has a `log` builtin that shadows /usr/bin/log.
+    r = vm.sh("sudo /usr/bin/log show --last boot --style compact --predicate "
+              "'process == \"launchd\" AND (eventMessage CONTAINS[c] \"disabled\" "
+              "OR eventMessage CONTAINS \"Setting service\" OR eventMessage CONTAINS \"rootless\" "
+              "OR eventMessage CONTAINS \"protected\" OR eventMessage CONTAINS[c] \"override\")'",
+              check=False, timeout=300)
+    return [line for line in r.stdout.splitlines() if "launchd" in line]
+
+
+def judge(snap: dict, expect_disabled: bool) -> dict:
+    """Per label: an override is in effect when it is set in every domain the
+    job is registered in, and a disabled job must not be running."""
+    labels = snap["probe"]["labels"]
+    registered = {k: v for k, v in labels.items() if v["registered"]}
+    in_effect = sorted(k for k, v in registered.items()
+                       if set(v["registered"]) <= set(v["disabled_in"]))
+    running = sorted(k for k, v in registered.items() if v["pid"] > 0)
+    if expect_disabled:
+        wrong = sorted(set(registered) - set(in_effect))
+        running_anyway = sorted(set(in_effect) & set(running))
+    else:
+        wrong = sorted(k for k, v in registered.items() if v["disabled_in"])
+        running_anyway = []
+    return {
+        "step": snap["step"],
+        "judged": len(registered),
+        "unregistered": sorted(set(labels) - set(registered)),
+        "override_in_effect": len(in_effect),
+        "not_in_effect" if expect_disabled else "still_disabled": wrong,
+        "disabled_but_running": running_anyway,
+        "ok": not wrong and not running_anyway,
+    }
+
+
+def run_scenario(scenario: str, os_version: str, preset: str, cycles: int, settle: int,
+                 out: Path, workdir: Path, keep: bool) -> bool:
+    base = base_name(os_version)
+    if base not in local_vms():
+        raise SystemExit(f"no base image {base}; run `python3 tests/e2e.py prepare --os {os_version}`")
+    name = f"debloat-e2e-{os_version}-{scenario}-{int(time.time())}"
+    tart("clone", base, name)
+    vm = VM(name, workdir)
+    report: dict = {"scenario": scenario, "os": os_version, "preset": preset, "vm": name,
+                    "snapshots": [], "checks": [], "boot_logs": []}
+    try:
+        log(f"{scenario}: booting {name}")
+        vm.start()
+        sip = vm.sh("csrutil status").stdout.strip()
+        if "enabled" not in sip:
+            raise RuntimeError(f"SIP is not on in the guest ({sip}); results would prove nothing")
+        vm.sh(f"cat > {GUEST_DEBLOAT} && chmod +x {GUEST_DEBLOAT}",
+              stdin=(REPO / "debloat").read_text())
+        vm.sh(f"cat > {GUEST_PROBE}", stdin=PROBE)
+        report["guest"] = {
+            "macos": vm.sh("sw_vers -productVersion").stdout.strip(),
+            "build": vm.sh("sw_vers -buildVersion").stdout.strip(),
+            "sip": sip,
+            "debloat": vm.sh(f"python3 {GUEST_DEBLOAT} --version").stdout.strip(),
+        }
+        log(f"guest macOS {report['guest']['macos']} ({report['guest']['build']}), {sip}")
+
+        # Some services re-disable themselves shortly after boot; let that happen first so
+        # the target list doesn't depend on how fast the dry-run ran.
+        time.sleep(settle)
+        dry = vm.sh(f"python3 {GUEST_DEBLOAT} --dry-run --preset {preset}").stdout
+        labels = [line.split()[1] for line in dry.splitlines() if line.startswith("  disable  ")]
+        report["targets"] = labels
+        report["snapshots"].append(snapshot(vm, labels, "before apply"))
+
+        applied = vm.sh(f"python3 {GUEST_DEBLOAT} --preset {preset} 2>&1", check=False)
+        report["apply_output"] = applied.stdout
+        if "sudo required" in applied.stdout:
+            raise RuntimeError(f"apply never ran:\n{applied.stdout}")
+        after = snapshot(vm, labels, "after apply")
+        report["snapshots"].append(after)
+        report["checks"].append(judge(after, expect_disabled=True))
+
+        if scenario == "apply":
+            time.sleep(settle)
+            later = snapshot(vm, labels, f"{settle}s after apply")
+            report["snapshots"].append(later)
+            report["checks"].append(judge(later, expect_disabled=True))
+        elif scenario == "restore":
+            restored = vm.sh(f"python3 {GUEST_DEBLOAT} --restore 2>&1", check=False)
+            report["restore_output"] = restored.stdout
+            snap = snapshot(vm, labels, "after --restore")
+            report["snapshots"].append(snap)
+            report["checks"].append(judge(snap, expect_disabled=False))
+        elif scenario in ("reboot", "poweroff"):
+            for n in range(1, cycles + 1):
+                step = f"after {'reboot' if scenario == 'reboot' else 'power-off + cold boot'} {n}"
+                log(f"{scenario}: cycle {n}/{cycles}")
+                vm.reboot() if scenario == "reboot" else vm.poweroff_and_boot()
+                time.sleep(settle)
+                snap = snapshot(vm, labels, step)
+                report["snapshots"].append(snap)
+                report["boot_logs"].append({"step": step, "lines": boot_log(vm)})
+                report["checks"].append(judge(snap, expect_disabled=True))
+    finally:
+        vm.stop()
+        if not keep:
+            tart("delete", name, check=False)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / f"{os_version}-{scenario}.json").write_text(json.dumps(report, indent=2, default=list))
+
+    for c in report["checks"]:
+        bad = c.get("not_in_effect", c.get("still_disabled", []))
+        verdict = lambda ok: "PASS" if ok else "FAIL"
+        print(f"  {c['step']}  ({c['judged']} judged, {len(c['unregistered'])} not loaded on this VM)")
+        if "not_in_effect" in c:
+            print(f"    {verdict(not bad)}  override in effect  {c['override_in_effect']}/{c['judged']}")
+            stopped = (f"{verdict(not c['disabled_but_running'])}  stopped             "
+                       f"{c['override_in_effect'] - len(c['disabled_but_running'])}/{c['override_in_effect']}"
+                       if c["override_in_effect"] else "n/a   stopped             no override in effect")
+            print(f"    {stopped}")
+        else:
+            print(f"    {verdict(not bad)}  back to pre-apply   {c['judged'] - len(bad)}/{c['judged']}")
+        for label in bad:
+            print(f"          {'not in effect' if 'not_in_effect' in c else 'still disabled'}: {label}")
+        for label in c["disabled_but_running"]:
+            print(f"          running anyway: {label}")
+    return all(c["ok"] for c in report["checks"])
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("prepare", help="build the base image for one macOS version")
+    p.add_argument("--os", choices=sorted(IMAGES), required=True)
+    r = sub.add_parser("run", help="run one scenario, or all of them, on fresh clones")
+    r.add_argument("scenario", choices=(*SCENARIOS, "all"))
+    r.add_argument("--os", choices=sorted(IMAGES), required=True)
+    r.add_argument("--preset", default="telemetry")
+    r.add_argument("--cycles", type=int, default=2, help="reboots / cold boots per scenario")
+    r.add_argument("--settle", type=int, default=60, help="seconds to wait after an apply or a boot before judging again")
+    r.add_argument("--out", type=Path, help="evidence dir (default: a new temp dir)")
+    r.add_argument("--keep", action="store_true", help="keep the VM clone for inspection")
+    args = ap.parse_args()
+
+    workdir = Path(tempfile.mkdtemp(prefix="debloat-e2e-"))
+    if args.cmd == "prepare":
+        return cmd_prepare(args.os, workdir)
+    out = args.out or workdir
+    ok = True
+    for scenario in SCENARIOS if args.scenario == "all" else (args.scenario,):
+        ok = run_scenario(scenario, args.os, args.preset, args.cycles, args.settle, out, workdir,
+                               args.keep) and ok
+    log(f"evidence: {out}")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

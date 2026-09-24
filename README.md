@@ -168,12 +168,12 @@ Uses `launchctl disable`, which writes an override table per launchd domain: `sy
 - `system/` disables affect all users · `gui/$UID` disables only current user
 - Multi-user: run once per account
 
-**macOS 26.x and 27 do not reliably honour these overrides.** Two separate failures, both measured on 26.5.2 (25F84) with SIP enabled:
+**With SIP on, macOS drops these overrides at every boot, and relaunches some jobs while their override is still in place.** Both are reproduced on macOS 26.5 (25F71) by the [VM tests](#testing) (`run reboot`, `run apply`):
 
-- **Overrides are cleared at boot, selectively.** After a boot, 264 of the 268 catalog labels had no override in effect in the domain their job runs in. The ones that get cleared are the ones that would have taken effect; overrides sitting in a domain where the job isn't registered survive untouched. Both store files are rewritten within two minutes of boot. The write itself is fine — `sudo launchctl disable gui/$UID/<agent>` returns 0 and the key appears immediately — so they are lost after the apply, not during it. Reported in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8), and on macOS 27 in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8#issuecomment-5764136672) and [#20](https://github.com/OleksandrKrupko/mac-os-debloat/issues/20): after a reboot, `--status` showed 4 of 266 labels disabled following a `telemetry` apply.
-- **launchd also starts jobs whose override is intact.** On a machine 8 days into an uptime, 14 catalog labels were disabled in every domain they are registered in and running anyway, started by launchd (`ppid 1`) up to 19 hours after the override store was last written. `launchctl print-disabled system` reads `=> disabled` for them the whole time.
+- **Cleared at boot.** After a `telemetry` apply, 44 of 44 overrides were in effect; after each of two reboots, 0 of 44. launchd logs the reason at boot, once per label: `[user/501/com.apple.tipsd:] (lint): Ignoring enabled state due to rootless restrictions` — "rootless" is SIP. The only Apple overrides seen surviving a boot are the ones listed under `RemovableServices` in `/System/Library/Sandbox/com.apple.xpc.launchd.rootless.plist` (sealed system volume; three catalog labels are on it), and the ones a service sets on itself at every boot (`Setting service com.apple.appleseed.seedusaged.postinstall to disabled (initiated by seedusaged)`). SIP-off debloat scripts persist for exactly this reason, and it has been reported since macOS 10.12.4 ([openradar 32281471](https://openradar.appspot.com/32281471)). Reported here in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8), and on macOS 27 in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8#issuecomment-5764136672) and [#20](https://github.com/OleksandrKrupko/mac-os-debloat/issues/20).
+- **Relaunched while disabled.** With no reboot at all, 10 to 16 of the 44 were running again 90 seconds after the apply (three runs), every override still in effect — `analyticsd`, `biomed`, `SubmitDiagInfo`, `ap.adprivacyd` and others. Re-applying after each boot puts all 44 overrides back, and the same services come back again.
 
-Neither mechanism is established, and no version of this tool can fix either from userspace — `launchctl disable` is the supported SIP-safe interface, and it is what is being ignored.
+`launchctl disable` is the supported SIP-safe interface, and with SIP on it is launchd itself that discards and overrides it; no userspace tool can change that. Re-run the apply after a reboot to get the overrides back.
 
 So don't trust it, check it. `debloat --status` reports the per-domain truth, how many catalog services are running right now, and how many of them are **disabled but running anyway** — that last number is the one that catches both failures. If it's non-zero, the overrides are not being honoured on your build. Every apply also verifies itself and prints any label whose override did not take effect, rather than reporting success.
 
@@ -238,6 +238,25 @@ Scripts in [`extras/`](extras) are not part of the TUI:
 - `sync-readme.py` — rewrite catalog counts in `README.md` and `package.json` from the label list. Run after adding or removing a label. `python3 extras/sync-readme.py --check` exits 1 if the docs are stale.
 - `disable-animations.sh` / `enable-animations.sh` — reduce motion and transparency (the Liquid Glass memory-leak workaround on Tahoe), zero Dock/window/Finder animation durations, restart Dock and Finder. `defaults write` only, no sudo, fully reversible with the enable script.
 - `disable-spotlight.sh` / `enable-spotlight.sh` — the Spotlight *index* toggle as a standalone script for setups that never open the TUI. Same `mdutil -a -d` / `-i on` + `-E` as the TUI row; disable also erases the index on every volume. These scripts do **not** `launchctl disable` KeepAlive `mds` / `corespotlightd`. That extra RAM cut is a catalog section gated `[macos>=27]` (`mdutil -d` leaves `mds` resident; killing it on Tahoe 26 broke typed Cmd-Space). `enable-spotlight.sh` only turns indexing back on; reverse KeepAlive from the TUI, `--restore`, or `--enable-all`.
+
+</details>
+
+<details>
+<summary><b>Testing</b></summary>
+
+`python3 tests/test_debloat.py` runs the unit tests against a fake `launchctl`, anywhere, in seconds.
+
+[`tests/e2e.py`](tests/e2e.py) runs the real thing: `debloat` on real macOS with SIP on, inside throwaway [tart](https://tart.run) VMs, through real reboots and cold boots. Each scenario runs on a fresh copy-on-write clone of a prepared base image, reads launchd's own state (not debloat's), and writes the evidence as JSON: per-label domains, overrides and pids, both override stores, and launchd's boot log.
+
+```sh
+python3 tests/e2e.py prepare --os 26.5            # once: pulls the image, installs python3
+python3 tests/e2e.py run reboot --os 26.5         # apply, reboot twice, judge each boot
+python3 tests/e2e.py run all --os 26.5 --preset balanced --out ./evidence
+```
+
+Scenarios: `apply`, `restore` (back to the pre-apply state), `reboot`, `poweroff` (shutdown + cold boot). Each step reports two verdicts: *override in effect* (set in every domain the job is registered in) and *stopped* (no pid). `--os 27.0` uses the macOS 27 image.
+
+Needs an Apple Silicon Mac: GitHub's hosted macOS runners are VMs themselves and can't nest one. The VM's hardware is virtual, so labels whose jobs only load on real hardware (battery, Bluetooth, Touch ID) are reported as not loaded rather than judged.
 
 </details>
 
