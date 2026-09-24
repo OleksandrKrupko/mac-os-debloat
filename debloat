@@ -36,6 +36,13 @@ from pathlib import Path
 UID = os.getuid()
 DOMAINS = ("system", f"gui/{UID}")
 BACKUP_DIR = Path.home() / ".mac-os-debloat"
+PERSIST_LABEL = "io.github.oleksandrkrupko.debloat"
+PERSIST_PLIST = Path(f"/Library/LaunchDaemons/{PERSIST_LABEL}.plist")
+PERSIST_DIR = Path("/Library/Application Support/mac-os-debloat")
+PERSIST_STATE = PERSIST_DIR / "persist.json"
+PERSIST_REPORT = PERSIST_DIR / "last-run.json"
+PERSIST_PASSES = 5
+PERSIST_PASS_S = 60
 
 LAUNCHD_DIRS = (
     "/System/Library/LaunchDaemons",
@@ -1363,6 +1370,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
                 continue
             write_snapshot(sections)
             result = apply_changes(sections, report=in_tui)
+            save_persist_set(sections)
             refresh_state(sections)
             spotlight_msg = ""
             if spot.selected == spot.disabled:
@@ -1440,6 +1448,7 @@ def run_apply(sections: list[Section], dry_run: bool) -> int:
         return 1
     write_snapshot(sections)
     result = apply_changes(sections)
+    save_persist_set(sections)
     print(f'applied: {result["disabled"]} disabled, {result["enabled"]} enabled, '
           f'{result["killed"]} killed')
     sys.stderr.write(apply_problems(result))
@@ -1471,6 +1480,7 @@ def cmd_status(sections: list[Section], as_json: bool) -> int:
             "disabled_but_running": ignored,
             "spotlight": spot,
             "reclaimable_ram_mb": free,
+            "persist": persist_status(),
         }, indent=2))
         return 0
     print(f"catalog: {stats.total} labels in {stats.sections} sections "
@@ -1482,6 +1492,13 @@ def cmd_status(sections: list[Section], as_json: bool) -> int:
         print(f"  disabled but running anyway: {len(ignored)}   "
               f"(launchd started these despite the override)")
     print(f"spotlight: {spot}")
+    persist = persist_status()
+    if persist["installed"]:
+        line = f"persist: on, {persist['labels']} services re-disabled at every boot"
+        if persist["respawners"] is not None:
+            line += (f"; last boot left {len(persist['respawners'])} running that "
+                     f"respawn when killed")
+        print(line)
     if free is not None:
         print(f"reclaimable RAM now: ~{free} MB")
     return 0
@@ -1506,6 +1523,139 @@ def cmd_audit(sections: list[Section], absent: list[str],
             print(f"  {label}")
     if not absent and not version_skip:
         print("all embedded labels apply to this build.")
+    return 0
+
+
+def persist_status() -> dict:
+    if not PERSIST_PLIST.exists():
+        return {"installed": False}
+    state = json.loads(PERSIST_STATE.read_text())
+    last = json.loads(PERSIST_REPORT.read_text()) if PERSIST_REPORT.exists() else {}
+    return {"installed": True, "labels": len(state["labels"]),
+            "last_boot": last.get("boot"), "respawners": last.get("respawners")}
+
+
+def sudo_write(path: Path, text: str) -> None:
+    subprocess.run(["sudo", "tee", str(path)], input=text, text=True,
+                   stdout=subprocess.DEVNULL, check=True)
+
+
+def save_persist_set(sections: list[Section]) -> None:
+    """Keep the boot daemon's label set equal to what the user last asked for,
+    so re-enabling a service is never undone at the next boot."""
+    if not PERSIST_PLIST.exists():
+        return
+    labels = sorted(it.label for sec in sections for it in sec.items if not it.selected)
+    sudo_write(PERSIST_STATE, json.dumps({"uid": UID, "labels": labels}, indent=2))
+
+
+def cmd_persist(sections: list[Section]) -> int:
+    refresh_state(sections)
+    labels = sorted(it.label for sec in sections for it in sec.items if it.disabled)
+    if not labels:
+        print("nothing is disabled — apply a preset or pick services first, then "
+              "run --persist", file=sys.stderr)
+        return 1
+    if not prime_sudo():
+        print("sudo required to install the boot daemon", file=sys.stderr)
+        return 1
+    plist = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>{PERSIST_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>{PERSIST_DIR}/debloat</string>
+    <string>--persist-run</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>{PERSIST_DIR}/daemon.log</string>
+  <key>StandardErrorPath</key><string>{PERSIST_DIR}/daemon.log</string>
+</dict>
+</plist>
+"""
+    # Root runs this copy at every boot, so it must not stay writable by the user.
+    subprocess.run(["sudo", "mkdir", "-p", str(PERSIST_DIR)], check=True)
+    subprocess.run(["sudo", "install", "-m", "644", "-o", "root", "-g", "wheel",
+                    str(Path(__file__).resolve()), str(PERSIST_DIR / "debloat")], check=True)
+    sudo_write(PERSIST_STATE, json.dumps({"uid": UID, "labels": labels}, indent=2))
+    sudo_write(PERSIST_PLIST, plist)
+    subprocess.run(["sudo", "chown", "root:wheel", str(PERSIST_PLIST)], check=True)
+    print(f"persist on: {len(labels)} disabled services are re-disabled at every boot, "
+          f"then checked {PERSIST_PASSES}× a minute apart after you log in. "
+          f"`debloat --no-persist` removes it.")
+    return 0
+
+
+def cmd_no_persist() -> int:
+    if not PERSIST_PLIST.exists() and not PERSIST_DIR.exists():
+        print("persist is not installed")
+        return 0
+    if not prime_sudo():
+        print("sudo required to remove the boot daemon", file=sys.stderr)
+        return 1
+    subprocess.run(["sudo", "launchctl", "bootout", f"system/{PERSIST_LABEL}"],
+                   capture_output=True, check=False)
+    subprocess.run(["sudo", "rm", "-f", str(PERSIST_PLIST)], check=True)
+    subprocess.run(["sudo", "rm", "-rf", str(PERSIST_DIR)], check=True)
+    print("persist off: boot daemon and its files removed. Services you disabled "
+          "stay disabled until the next boot.")
+    return 0
+
+
+def kill_label(label: str, pids: list[int]) -> None:
+    for domain in DOMAINS:
+        subprocess.run(["launchctl", "bootout", f"{domain}/{label}"],
+                       capture_output=True, check=False)
+    for pid in pids:
+        subprocess.run(["kill", "-9", str(pid)], capture_output=True, check=False)
+
+
+def cmd_persist_run() -> int:
+    """The boot daemon, as root: re-disable the saved set before login, again
+    once the user's gui domain exists, then kill whatever still runs — once per
+    label. A label that is running again after its kill respawns on its own and
+    is left alone rather than killed on every pass."""
+    global UID, DOMAINS
+    state = json.loads(PERSIST_STATE.read_text())
+    UID = state["uid"]
+    DOMAINS = ("system", f"gui/{UID}")
+    wanted = set(state["labels"])
+    run: dict = {"boot": time.strftime("%Y-%m-%dT%H:%M:%S"), "wanted": len(wanted), "passes": []}
+
+    def reapply(step: str) -> None:
+        sections = load_sections()[0]
+        refresh_state(sections)
+        for sec in sections:
+            for it in sec.items:
+                it.selected = it.label not in wanted
+        result = apply_changes(sections, report=lambda _text: None)
+        run[step] = {"disabled": result["disabled"], "killed": result["killed"],
+                     "not_disabled": result["not_disabled"]}
+
+    reapply("at_boot")
+    while os.stat("/dev/console").st_uid != UID:
+        time.sleep(2)
+    run["login"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    reapply("at_login")
+
+    killed: set[str] = set()
+    respawners: set[str] = set()
+    for n in range(1, PERSIST_PASSES + 1):
+        time.sleep(PERSIST_PASS_S)
+        reapply(f"pass_{n}_overrides")
+        running = running_pids(sorted(wanted))
+        fresh = {label: pids for label, pids in running.items() if label not in killed}
+        respawners |= set(running) - set(fresh)
+        for label, pids in fresh.items():
+            kill_label(label, pids)
+        killed |= set(fresh)
+        run["passes"].append({"pass": n, "killed": sorted(fresh), "left_running": sorted(respawners)})
+        PERSIST_REPORT.write_text(json.dumps(run, indent=2))
+    run["respawners"] = sorted(respawners)
+    PERSIST_REPORT.write_text(json.dumps(run, indent=2))
     return 0
 
 
@@ -1625,6 +1775,8 @@ Usage:
   debloat --disable-all   disable every label, no exceptions (prompts sudo)
   debloat --enable-all    re-enable everything — the panic button
   debloat --restore       revert to the state before your last apply
+  debloat --persist       re-disable what you disabled at every boot (sudo once)
+  debloat --no-persist    remove the boot daemon and its files
   debloat --dry-run       with --preset/--disable-all/--enable-all: preview only
   debloat --json          with --status: machine-readable output
   debloat -v|--version    print version
@@ -1665,6 +1817,8 @@ def main() -> int:
     if "-v" in argv or "--version" in argv:
         print(f"mac-os-debloat {VERSION}")
         return 0
+    if "--persist-run" in argv:
+        return cmd_persist_run()
 
     major = macos_major()
     if major is not None and major not in (26, 27):
@@ -1708,6 +1862,10 @@ def main() -> int:
         return 0
     if "--restore" in argv:
         return cmd_restore(sections)
+    if "--persist" in argv:
+        return cmd_persist(sections)
+    if "--no-persist" in argv:
+        return cmd_no_persist()
     if "--enable-all" in argv or "--disable-all" in argv:
         refresh_state(sections)
         want_enabled = "--enable-all" in argv

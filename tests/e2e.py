@@ -33,7 +33,7 @@ IMAGES = {
     "26.5": "ghcr.io/cirruslabs/macos-tahoe-vanilla:26.5",
     "27.0": "ghcr.io/cirruslabs/macos-golden-gate-vanilla:27.0",
 }
-SCENARIOS = ("apply", "restore", "reboot", "poweroff")
+SCENARIOS = ("apply", "restore", "reboot", "poweroff", "persist")
 GUEST_USER = "admin"
 GUEST_PASSWORD = "admin"
 GUEST_DEBLOAT = "/Users/admin/debloat"
@@ -354,6 +354,37 @@ def run_scenario(scenario: str, os_version: str, preset: str, cycles: int, settl
             snap = snapshot(vm, labels, "after --restore")
             report["snapshots"].append(snap)
             report["checks"].append(judge(snap, baseline, expect_disabled=False))
+        elif scenario == "persist":
+            report["persist_output"] = vm.sh(f"python3 {GUEST_DEBLOAT} --persist 2>&1").stdout
+            for n in range(1, cycles + 1):
+                log(f"persist: reboot {n}/{cycles}")
+                vm.reboot()
+                time.sleep(settle)
+                early = snapshot(vm, labels, f"reboot {n}, {settle}s after boot")
+                report["snapshots"].append(early)
+                report["checks"].append(judge(early, baseline, expect_disabled=True))
+                deadline = time.time() + 900
+                while time.time() < deadline:
+                    last = vm.sh("cat '/Library/Application Support/mac-os-debloat/last-run.json'",
+                                 check=False)
+                    if last.returncode == 0 and '"respawners"' in last.stdout:
+                        break
+                    time.sleep(15)
+                else:
+                    raise RuntimeError("boot daemon did not finish its passes in 15 minutes")
+                done = snapshot(vm, labels, f"reboot {n}, after the daemon's last pass")
+                report["snapshots"].append(done)
+                report.setdefault("daemon_runs", []).append(json.loads(last.stdout))
+                report["boot_logs"].append({"step": done["step"], "lines": boot_log(vm)})
+                report["checks"].append(judge(done, baseline, expect_disabled=True))
+                vm.sh("sudo rm -f '/Library/Application Support/mac-os-debloat/last-run.json'")
+            report["no_persist_output"] = vm.sh(f"python3 {GUEST_DEBLOAT} --no-persist 2>&1").stdout
+            leftovers = vm.sh("ls -d /Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist "
+                              "'/Library/Application Support/mac-os-debloat' 2>/dev/null", check=False).stdout
+            report["checks"].append({"step": "after --no-persist", "judged": 0, "unregistered": [],
+                                     "override_in_effect": 0, "not_in_effect": [],
+                                     "disabled_but_running": [], "leftovers": leftovers.split(),
+                                     "ok": not leftovers.strip()})
         elif scenario in ("reboot", "poweroff"):
             for n in range(1, cycles + 1):
                 step = f"after {'reboot' if scenario == 'reboot' else 'power-off + cold boot'} {n}"
@@ -375,6 +406,10 @@ def run_scenario(scenario: str, os_version: str, preset: str, cycles: int, settl
     for c in report["checks"]:
         bad = c.get("not_in_effect", c.get("still_disabled", []))
         verdict = lambda ok: "PASS" if ok else "FAIL"
+        if "leftovers" in c:
+            print(f"  {c['step']}\n    {verdict(c['ok'])}  files removed       "
+                  f"{'all' if c['ok'] else ', '.join(c['leftovers'])}")
+            continue
         print(f"  {c['step']}  ({c['judged']} judged, {len(c['unregistered'])} not loaded on this VM)")
         if "not_in_effect" in c:
             print(f"    {verdict(not bad)}  override in effect  {c['override_in_effect']}/{c['judged']}")
