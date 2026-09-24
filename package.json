@@ -1,6 +1,6 @@
 {
   "name": "@oleksandr_krupko/mac-os-debloat",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "description": "Debloat your Mac from the terminal. SIP-safe interactive console util to disable 296 non-essential macOS launchd services + Spotlight toggle, with one-key telemetry/balanced presets in the TUI and your own custom presets. Self-validates against your macOS build; sections can be gated per macOS major. macOS Tahoe 26 and Golden Gate 27, Apple Silicon. Zero deps.",
   "bin": {
     "mac-os-debloat": "bin/cli.js",

@@ -10,6 +10,7 @@ its evidence (launchctl state, override stores, launchd's boot log) as JSON.
   python3 tests/e2e.py prepare --os 26.5          once per macOS version
   python3 tests/e2e.py run reboot --os 26.5
   python3 tests/e2e.py run all --os 26.5 --preset balanced --out /tmp/e2e
+  python3 tests/e2e.py run reboot --os 26.5 --preset disable-all     every label
 
 Needs an Apple Silicon Mac with tart (https://tart.run) on PATH. The VM's
 hardware is virtual (no battery, Bluetooth, Touch ID), so a label whose job
@@ -250,19 +251,21 @@ def boot_log(vm: VM) -> list[str]:
     return [line for line in r.stdout.splitlines() if "launchd" in line]
 
 
-def judge(snap: dict, expect_disabled: bool) -> dict:
+def judge(snap: dict, baseline: dict, expect_disabled: bool) -> dict:
     """Per label: an override is in effect when it is set in every domain the
-    job is registered in, and a disabled job must not be running."""
+    job was registered in before the apply, and a disabled job must not be
+    running. Domains come from the baseline because an honoured override can
+    keep a job from registering at all."""
     labels = snap["probe"]["labels"]
-    registered = {k: v for k, v in labels.items() if v["registered"]}
-    in_effect = sorted(k for k, v in registered.items()
-                       if set(v["registered"]) <= set(v["disabled_in"]))
+    domains = {k: v["registered"] for k, v in baseline["probe"]["labels"].items() if v["registered"]}
+    registered = {k: v for k, v in labels.items() if k in domains}
+    in_effect = sorted(k for k, v in registered.items() if set(domains[k]) <= set(v["disabled_in"]))
     running = sorted(k for k, v in registered.items() if v["pid"] > 0)
     if expect_disabled:
         wrong = sorted(set(registered) - set(in_effect))
         running_anyway = sorted(set(in_effect) & set(running))
     else:
-        wrong = sorted(k for k, v in registered.items() if v["disabled_in"])
+        wrong = sorted(k for k, v in registered.items() if set(domains[k]) & set(v["disabled_in"]))
         running_anyway = []
     return {
         "step": snap["step"],
@@ -273,6 +276,26 @@ def judge(snap: dict, expect_disabled: bool) -> dict:
         "disabled_but_running": running_anyway,
         "ok": not wrong and not running_anyway,
     }
+
+
+def label_table(report: dict) -> str:
+    """One row per label, one column per step: `off` (override in effect, no pid),
+    `off+running`, `on`, `on+running`; `(unloaded)` when launchd no longer lists the
+    job, `not loaded` when it never loaded on this VM."""
+    snaps = report["snapshots"]
+    rows = ["label\tdomains\t" + "\t".join(s["step"] for s in snaps)]
+    for label in report.get("targets", []):
+        domains = snaps[0]["probe"]["labels"][label]["registered"]
+        if not domains:
+            rows.append(f"{label}\t-\t" + "\t".join("not loaded" for _ in snaps))
+            continue
+        cells = []
+        for s in snaps:
+            v = s["probe"]["labels"][label]
+            state = "off" if set(domains) <= set(v["disabled_in"]) else "on"
+            cells.append(state + ("+running" if v["pid"] > 0 else "") + ("" if v["registered"] else " (unloaded)"))
+        rows.append(f"{label}\t{','.join(domains)}\t" + "\t".join(cells))
+    return "\n".join(rows) + "\n"
 
 
 def run_scenario(scenario: str, os_version: str, preset: str, cycles: int, settle: int,
@@ -305,30 +328,32 @@ def run_scenario(scenario: str, os_version: str, preset: str, cycles: int, settl
         # Some services re-disable themselves shortly after boot; let that happen first so
         # the target list doesn't depend on how fast the dry-run ran.
         time.sleep(settle)
-        dry = vm.sh(f"python3 {GUEST_DEBLOAT} --dry-run --preset {preset}").stdout
+        selection = "--disable-all" if preset == "disable-all" else f"--preset {preset}"
+        dry = vm.sh(f"python3 {GUEST_DEBLOAT} --dry-run {selection}").stdout
         labels = [line.split()[1] for line in dry.splitlines() if line.startswith("  disable  ")]
         report["targets"] = labels
-        report["snapshots"].append(snapshot(vm, labels, "before apply"))
+        baseline = snapshot(vm, labels, "before apply")
+        report["snapshots"].append(baseline)
 
-        applied = vm.sh(f"python3 {GUEST_DEBLOAT} --preset {preset} 2>&1", check=False)
+        applied = vm.sh(f"python3 {GUEST_DEBLOAT} {selection} 2>&1", check=False)
         report["apply_output"] = applied.stdout
         if "sudo required" in applied.stdout:
             raise RuntimeError(f"apply never ran:\n{applied.stdout}")
         after = snapshot(vm, labels, "after apply")
         report["snapshots"].append(after)
-        report["checks"].append(judge(after, expect_disabled=True))
+        report["checks"].append(judge(after, baseline, expect_disabled=True))
 
         if scenario == "apply":
             time.sleep(settle)
             later = snapshot(vm, labels, f"{settle}s after apply")
             report["snapshots"].append(later)
-            report["checks"].append(judge(later, expect_disabled=True))
+            report["checks"].append(judge(later, baseline, expect_disabled=True))
         elif scenario == "restore":
             restored = vm.sh(f"python3 {GUEST_DEBLOAT} --restore 2>&1", check=False)
             report["restore_output"] = restored.stdout
             snap = snapshot(vm, labels, "after --restore")
             report["snapshots"].append(snap)
-            report["checks"].append(judge(snap, expect_disabled=False))
+            report["checks"].append(judge(snap, baseline, expect_disabled=False))
         elif scenario in ("reboot", "poweroff"):
             for n in range(1, cycles + 1):
                 step = f"after {'reboot' if scenario == 'reboot' else 'power-off + cold boot'} {n}"
@@ -338,13 +363,14 @@ def run_scenario(scenario: str, os_version: str, preset: str, cycles: int, settl
                 snap = snapshot(vm, labels, step)
                 report["snapshots"].append(snap)
                 report["boot_logs"].append({"step": step, "lines": boot_log(vm)})
-                report["checks"].append(judge(snap, expect_disabled=True))
+                report["checks"].append(judge(snap, baseline, expect_disabled=True))
     finally:
         vm.stop()
         if not keep:
             tart("delete", name, check=False)
         out.mkdir(parents=True, exist_ok=True)
         (out / f"{os_version}-{scenario}.json").write_text(json.dumps(report, indent=2, default=list))
+        (out / f"{os_version}-{scenario}-labels.tsv").write_text(label_table(report))
 
     for c in report["checks"]:
         bad = c.get("not_in_effect", c.get("still_disabled", []))
@@ -358,10 +384,12 @@ def run_scenario(scenario: str, os_version: str, preset: str, cycles: int, settl
             print(f"    {stopped}")
         else:
             print(f"    {verdict(not bad)}  back to pre-apply   {c['judged'] - len(bad)}/{c['judged']}")
-        for label in bad:
-            print(f"          {'not in effect' if 'not_in_effect' in c else 'still disabled'}: {label}")
-        for label in c["disabled_but_running"]:
-            print(f"          running anyway: {label}")
+        for kind, found in (("not in effect" if "not_in_effect" in c else "still disabled", bad),
+                            ("running anyway", c["disabled_but_running"])):
+            for label in found[:20]:
+                print(f"          {kind}: {label}")
+            if len(found) > 20:
+                print(f"          ... {len(found) - 20} more {kind} (see {os_version}-{scenario}-labels.tsv)")
     return all(c["ok"] for c in report["checks"])
 
 
@@ -373,7 +401,8 @@ def main() -> int:
     r = sub.add_parser("run", help="run one scenario, or all of them, on fresh clones")
     r.add_argument("scenario", choices=(*SCENARIOS, "all"))
     r.add_argument("--os", choices=sorted(IMAGES), required=True)
-    r.add_argument("--preset", default="telemetry")
+    r.add_argument("--preset", default="telemetry",
+                   help="telemetry, balanced, a custom preset name, or disable-all for every label")
     r.add_argument("--cycles", type=int, default=2, help="reboots / cold boots per scenario")
     r.add_argument("--settle", type=int, default=60, help="seconds to wait after an apply or a boot before judging again")
     r.add_argument("--out", type=Path, help="evidence dir (default: a new temp dir)")
