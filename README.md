@@ -5,7 +5,7 @@
 Interactive console util to disable 296 non-essential macOS launchd services — Siri, Apple Intelligence, telemetry, ads, and the Apple apps you don't use — plus the Spotlight file index. Frees ~1.5-2 GB of RAM on a 16 GB M4 ([how that was measured](#why)). Fully reversible. Built for macOS Tahoe 26.x and Golden Gate 27 on Apple Silicon (**tested on 27**, [#15](https://github.com/OleksandrKrupko/mac-os-debloat/issues/15)); Tahoe still supports four Intel models, which are untested. Verify with `debloat --status`, which reports what is actually in effect and how many of the services are running right now — including after a reboot ([see below](#persistence)). Counts in this README are filled by [`extras/sync-readme.py`](extras/sync-readme.py) from the catalog — do not edit the numbers by hand.
 **The desktop is not touched.** Nothing here disables WindowServer, Finder, Dock, Control Center, audio, networking, Wi-Fi, security or your own apps — those labels are not in the catalog at all, at any setting. Even `--disable-all` leaves you with a normal, fully working Mac; what it costs you is listed [below](#presets).
 
-**No SIP disable required** — works with System Integrity Protection fully on, via Apple's supported `launchctl disable`. Labels whose plists are missing on this build are skipped. Sections can also be gated with `[macos>=27]` (and `<`, `==`, …) so a disable that is safe on Golden Gate is **not** applied on Tahoe — same plist, different OS, different policy. `debloat --audit` lists both kinds of skip.
+**Two tiers, and you pick.** With System Integrity Protection on, the labels that stay off are the ones that aren't restarted on demand; `debloat --persist` re-disables them at every boot, because launchd drops these overrides when it starts. The rest — marked `[sip-off]` in `--list` and greyed out in the TUI — are restarted by macOS within seconds of a disable whenever SIP is on, so they can't be switched off there. `disable SIP` in the menu (or `debloat --disable-sip`) turns SIP off from inside macOS, no Recovery needed: `csrutil` asks for your password, then you restart. With SIP off, every label stays disabled and stopped through reboots. The cost: iPhone/iPad apps stop running on the Mac, and root processes can modify system files and load unsigned kernel extensions. `enable SIP` / `debloat --enable-sip` turns it back on. Measured in the [VM tests](#testing). Labels whose plists are missing on this build are skipped. Sections can also be gated with `[macos>=27]` (and `<`, `==`, …) so a disable that is safe on Golden Gate is **not** applied on Tahoe — same plist, different OS, different policy. `debloat --audit` lists both kinds of skip.
 
 ```bash
 npx -y @oleksandr_krupko/mac-os-debloat
@@ -27,7 +27,7 @@ All three methods need `python3` — preinstalled with the Xcode Command Line To
 
 ![mac-os-debloat TUI — preset menu on top, then the Spotlight row and 296 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
 
-The top block is a menu: arrow onto `telemetry`, `balanced`, `disable all` or `enable all` and press `enter` to apply it right away. `disable all` disappears once everything is off, `enable all` once everything is on, so every row on offer does something.
+The top block is a menu: arrow onto `telemetry`, `balanced`, `disable all`, `enable all` or `disable SIP` / `enable SIP` and press `enter` to apply it right away. With SIP on, presets and `disable all` skip the greyed-out `[sip-off]` rows and say how many they skipped. `disable all` disappears once everything is off, `enable all` once everything is on, so every row on offer does something.
 
 Everything below the menu is a checkbox: `[✓]` on, `[ ]` off, `[▘]` spinning while the system is still settling into the state you asked for. `space` flips the row under the cursor, `enter` applies whatever is ticked. The bottom line always explains the row under the cursor — what the service does and what you lose with it off. The first checkbox is Spotlight ([below](#spotlight)); everything after it is a launchd service.
 
@@ -45,6 +45,10 @@ debloat --audit            # list any embedded labels not present on your macOS 
 debloat --disable-all      # disable every label, no exceptions (prompts sudo)
 debloat --enable-all       # re-enable everything — the panic button
 debloat --restore          # revert to the state before your last apply
+debloat --persist          # re-disable what you disabled at every boot (sudo once)
+debloat --no-persist       # remove the boot daemon and its files
+debloat --disable-sip      # turn SIP off from macOS (csrutil asks your password; then restart)
+debloat --enable-sip       # turn SIP back on (restart)
 debloat --dry-run          # with --preset/--disable-all/--enable-all: preview only
 debloat --status --json    # machine-readable status
 ```
@@ -173,7 +177,10 @@ Uses `launchctl disable`, which writes an override table per launchd domain: `sy
 - **Cleared at boot.** After a `telemetry` apply, 44 of 44 overrides were in effect; after each of two reboots, 0 of 44. launchd logs the reason at boot, once per label: `[user/501/com.apple.tipsd:] (lint): Ignoring enabled state due to rootless restrictions` — "rootless" is SIP. With every catalog label applied (`--preset disable-all`, 273 loaded in the VM), exactly two survive a reboot or a cold boot: `ReportCrash` and `DiagnosticsReporter`, the two loaded catalog labels listed under `RemovableServices` in `/System/Library/Sandbox/com.apple.xpc.launchd.rootless.plist` (sealed system volume; the third catalog label on it, `Siri.agent`, keeps its override too). The only other overrides that outlive a boot are ones a service sets on itself at every boot (`Setting service com.apple.appleseed.seedusaged.postinstall to disabled (initiated by seedusaged)`). SIP-off debloat scripts persist for exactly this reason, and it has been reported since macOS 10.12.4 ([openradar 32281471](https://openradar.appspot.com/32281471)). Reported here in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8), and on macOS 27 in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8#issuecomment-5764136672) and [#20](https://github.com/OleksandrKrupko/mac-os-debloat/issues/20).
 - **Relaunched while disabled.** With no reboot at all, 10 to 16 of the 44 were running again 90 seconds after the apply (three runs), every override still in effect — `analyticsd`, `biomed`, `SubmitDiagInfo`, `ap.adprivacyd` and others. Re-applying after each boot puts all 44 overrides back, and the same services come back again.
 
-`launchctl disable` is the supported SIP-safe interface, and with SIP on it is launchd itself that discards and overrides it; no userspace tool can change that. Re-run the apply after a reboot to get the overrides back.
+So the catalog is split in two, from those runs:
+
+- **Works with SIP on.** Labels that launchd does not restart on demand. `debloat --persist` installs a boot daemon that re-disables them at every boot and at first login, then checks 5 times a minute apart and kills anything that started anyway — once; a label that is running again after its kill is left alone. On macOS 26.5 with SIP on, after a reboot: `--disable-all` 170/170 overrides in effect and 168–170 of 170 stopped, `balanced` 101/101 and 100/101, `telemetry` 27/27 and 26/27. The few left running had started after the daemon's last pass, and are now marked `[sip-off]` too.
+- **Needs SIP off** — marked `[sip-off]` in `--list`, greyed out in the TUI while SIP is on. With SIP on, launchd restarts these within seconds of a kill (60 of 70 within 2 s, `because ipc (mach)` or `xpc event` in its log), and refuses to unload them. With SIP off, all 273 labels that load in the VM stayed disabled and stopped through two reboots, no daemon needed.
 
 So don't trust it, check it. `debloat --status` reports the per-domain truth, how many catalog services are running right now, and how many of them are **disabled but running anyway** — that last number is the one that catches both failures. If it's non-zero, the overrides are not being honoured on your build. Every apply also verifies itself and prints any label whose override did not take effect, rather than reporting success.
 
@@ -268,7 +275,7 @@ Needs an Apple Silicon Mac: GitHub's hosted macOS runners are VMs themselves and
 
 | Tool | Console UI | Curated list | Persistent | No SIP disable | Zero install |
 |------|-----------|--------------|------------|----------------|--------------|
-| **mac-os-debloat** | ✓ | ✓ 296 labels + Spotlight | `launchctl disable` + verified per domain ([caveat](#persistence)) | ✓ | ✓ Python stdlib |
+| **mac-os-debloat** | ✓ | ✓ 296 labels + Spotlight | SIP on: boot daemon for the labels that stay off · SIP off: all ([details](#persistence)) | optional — two tiers | ✓ Python stdlib |
 | [launchtui](https://github.com/macournoyer/launchtui) | ✓ | ✗ generic | ✗ bootout only | ✓ | ✗ `cargo install` |
 | [Silverback-Debloater](https://github.com/Wamphyre/macOS_Silverback-Debloater) | ✗ | ✓ | ✓ | ✓ | ✗ Intel-desktop only |
 | [b0gdanw Tahoe gist](https://gist.github.com/b0gdanw/0c20c2fd5d0a7e6cff01849b57108967) | ✗ | ✓ | ✓ | ✗ needs SIP off | gist copy |

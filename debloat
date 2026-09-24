@@ -66,101 +66,101 @@ com.apple.campo                               # Cmd-Space + four-finger Apps pin
 # === Siri / voice assistant [balanced] ===
 com.apple.siriappintentsd                     # Siri App Intents orchestrator
 com.apple.assistant_service                   # Siri execution / flow XPC
-com.apple.assistantd                          # Siri core
+com.apple.assistantd [sip-off]                # Siri core
 com.apple.Siri.agent                          # Siri agent
 com.apple.SiriTTSTrainingAgent                # Siri voice training
-com.apple.sirittsd                            # Siri TTS daemon
-com.apple.siriinferenced                      # on-device Siri inference
-com.apple.siriknowledged                      # Siri knowledge graph
-com.apple.assistant_cdmd                      # Siri continuous dialog manager
-com.apple.parsecd                             # Siri/Spotlight suggestions backend
-com.apple.parsec-fbf                          # Siri Suggestions feedback
+com.apple.sirittsd [sip-off]                  # Siri TTS daemon
+com.apple.siriinferenced [sip-off]            # on-device Siri inference
+com.apple.siriknowledged [sip-off]            # Siri knowledge graph
+com.apple.assistant_cdmd [sip-off]            # Siri continuous dialog manager
+com.apple.parsecd [sip-off]                   # Siri/Spotlight suggestions backend
+com.apple.parsec-fbf [sip-off]                # Siri Suggestions feedback
 com.apple.intelligencecontextd                # Apple Intelligence context runtime
 com.apple.intelligenceplatformd               # Apple Intelligence platform
-com.apple.knowledge-agent                     # knowledge graph extraction
+com.apple.knowledge-agent [sip-off]           # knowledge graph extraction
 
 # === Apple Intelligence (Tahoe) [balanced] ===
 com.apple.mlruntimed                          # ML runtime
-com.apple.generativeexperiencesd              # Writing Tools / generative AI
+com.apple.generativeexperiencesd [sip-off]    # Writing Tools / generative AI
 com.apple.privatecloudcomputed                # Private Cloud Compute (AI cloud offload)
-com.apple.modelcatalogd                       # AI model catalog daemon
-com.apple.ModelCatalogAgent                   # AI model catalog agent
-com.apple.modelmanagerd                       # AI model manager / downloads
+com.apple.modelcatalogd [sip-off]             # AI model catalog daemon
+com.apple.ModelCatalogAgent [sip-off]         # AI model catalog agent
+com.apple.modelmanagerd [sip-off]             # AI model manager / downloads
 com.apple.naturallanguaged                    # NaturalLanguage framework daemon
 com.apple.textunderstandingd                  # text understanding AI
-com.apple.triald                              # Siri experiments (known CPU hog)
-com.apple.triald.system                       # Siri experiments (system)
+com.apple.triald [sip-off]                    # Siri experiments (known CPU hog)
+com.apple.triald.system [sip-off]             # Siri experiments (system)
 com.apple.visualintelligenced                 # Visual Intelligence (screenshot / camera AI)
 com.apple.GenerativeFunctions.agentstored     # Apple Intelligence agent session store
-com.apple.contextstored                       # context store (KNOWN >30GB MEMORY LEAK in Tahoe)
+com.apple.contextstored [sip-off]             # context store (KNOWN >30GB MEMORY LEAK in Tahoe)
 
 # === Telemetry / analytics [telemetry] ===
-com.apple.analyticsd                          # Apple diagnostics submission
-com.apple.tipsd                               # Tips app notifications
+com.apple.analyticsd [sip-off]                # Apple diagnostics submission
+com.apple.tipsd [sip-off]                     # Tips app notifications
 
 # === AirDrop / Continuity (no iPhone) [balanced] ===
-com.apple.sharingd                            # AirDrop / Handoff / share sheet (~60 MB resident)
-com.apple.rapportd                            # device proximity / Continuity discovery
+com.apple.sharingd [sip-off]                  # AirDrop / Handoff / share sheet (~60 MB resident)
+com.apple.rapportd [sip-off]                  # device proximity / Continuity discovery
 
 # === Diagnostics / crash reports [telemetry] ===
 com.apple.ReportCrash                         # auto crash report generator
-com.apple.spindump                            # hang detection / spin reports
+com.apple.spindump [sip-off]                  # hang detection / spin reports
 
 # === Apple ads [telemetry] ===
-com.apple.ap.adprivacyd                       # ad privacy
-com.apple.ap.promotedcontentd                 # promoted apps
+com.apple.ap.adprivacyd [sip-off]             # ad privacy
+com.apple.ap.promotedcontentd [sip-off]       # promoted apps
 
 # === Proactive / predictive [balanced] ===
-com.apple.coreduetd                           # activity tracker for proactive features
-com.apple.duetexpertd                         # prediction engine
-com.apple.suggestd                            # Spotlight smart suggestions backend
-com.apple.biomesyncd                          # biome event sync
+com.apple.coreduetd [sip-off]                 # activity tracker for proactive features
+com.apple.duetexpertd [sip-off]               # prediction engine
+com.apple.suggestd [sip-off]                  # Spotlight smart suggestions backend
+com.apple.biomesyncd [sip-off]                # biome event sync
 com.apple.navd                                # time-to-leave / commute predictions
-com.apple.ospredictiond                       # OS behavior predictions
+com.apple.ospredictiond [sip-off]             # OS behavior predictions
 
 # === Game Center / AirPlay receiver ===
 com.apple.gamed                               # Game Center
-com.apple.AirPlayXPCHelper                    # AirPlay helper
+com.apple.AirPlayXPCHelper [sip-off]          # AirPlay helper
 
 # === Photos analysis ===
-com.apple.photoanalysisd                      # face/scene/object scan in Photos
-com.apple.mediaanalysisd                      # media library indexing
+com.apple.photoanalysisd [sip-off]            # face/scene/object scan in Photos
+com.apple.mediaanalysisd [sip-off]            # media library indexing
 
 # === News / Stocks / Weather [balanced] ===
-com.apple.weatherd                            # weather data daemon (menu bar / widgets)
+com.apple.weatherd [sip-off]                  # weather data daemon (menu bar / widgets)
 com.apple.newsd                               # News app daemon
 
 # === Apple ID nags / Family [balanced] ===
-com.apple.familycircled                       # Family Sharing
-com.apple.followupd                           # Apple ID setup nags
+com.apple.familycircled [sip-off]             # Family Sharing
+com.apple.followupd [sip-off]                 # Apple ID setup nags
 
 # === Misc [balanced] ===
-com.apple.helpd                               # Help viewer indexer
+com.apple.helpd [sip-off]                     # Help viewer indexer
 com.apple.ndoagent                            # AppleCare / new-device outreach nags
 
 # === iMessage / FaceTime / phone relay (no iPhone) [balanced] ===
-com.apple.imagent                             # iMessage agent
-com.apple.telephonyutilities.callservicesd    # phone call relay from iPhone
+com.apple.imagent [sip-off]                   # iMessage agent
+com.apple.telephonyutilities.callservicesd [sip-off] # phone call relay from iPhone
 com.apple.imautomatichistorydeletionagent     # iMessage history cleanup
-com.apple.imcore.imtransferagent              # iMessage attachments
-com.apple.nearbyd                             # Continuity Nearby (AirDrop/Handoff discovery)
+com.apple.imcore.imtransferagent [sip-off]    # iMessage attachments
+com.apple.nearbyd [sip-off]                   # Continuity Nearby (AirDrop/Handoff discovery)
 com.apple.callhistoryd                        # iPhone call history sync
 com.apple.CallHistoryPluginHelper             # call history plugin
 com.apple.CallHistorySyncHelper               # call history iCloud sync
 com.apple.businessservicesd                   # Apple Business Chat
 
 # === HomeKit ===
-com.apple.homed                               # HomeKit daemon
+com.apple.homed [sip-off]                     # HomeKit daemon
 com.apple.homeeventsd                         # HomeKit events
 com.apple.threadradiod                        # Thread radio (Matter/HomeKit)
-com.apple.ThreadCommissionerService           # Matter device commissioning
+com.apple.ThreadCommissionerService [sip-off] # Matter device commissioning
 
 # === Apple Mail/Calendar/Contacts/Reminders (use Gmail/web instead) ===
 com.apple.contactsd                           # Contacts sync
-com.apple.calaccessd                          # Calendar backend
-com.apple.remindd                             # Reminders
+com.apple.calaccessd [sip-off]                # Calendar backend
+com.apple.remindd [sip-off]                   # Reminders
 com.apple.dataaccess.dataaccessd              # Exchange/CardDAV/CalDAV sync
-com.apple.email.maild                         # Mail daemon
+com.apple.email.maild [sip-off]               # Mail daemon
 
 # === Speech / dictation [balanced] ===
 com.apple.speech.speechsynthesisd.arm64       # text-to-speech (native Apple Silicon)
@@ -172,38 +172,38 @@ com.apple.speechmaintenanced                  # on-device speech model maintenan
 com.apple.quicklook.ThumbnailsAgent           # QuickLook thumbnails in Finder
 
 # === App Store + update nags (keeps softwareupdated for security) [balanced] ===
-com.apple.SoftwareUpdateNotificationManager   # update nag popups
-com.apple.amsengagementd                      # Apple Media Services engagement
+com.apple.SoftwareUpdateNotificationManager [sip-off] # update nag popups
+com.apple.amsengagementd [sip-off]            # Apple Media Services engagement
 
 # === Misc dead weight [balanced] ===
 com.apple.studentd                            # Schoolwork app
-com.apple.linkd                               # Universal Links (iOS-style deep links)
-com.apple.liveactivitiesd                     # Live Activities widgets
+com.apple.linkd [sip-off]                     # Universal Links (iOS-style deep links)
+com.apple.liveactivitiesd [sip-off]           # Live Activities widgets
 
 # === iCloud (no iCloud use) ===
-com.apple.cloudd                              # iCloud sync core
+com.apple.cloudd [sip-off]                    # iCloud sync core
 com.apple.cloudphotod                         # iCloud Photos sync
 com.apple.icloudwebd                          # iCloud.com / iCloud on the web
 
 # === Location/prediction extras (Find My still intact) [balanced] ===
-com.apple.routined                            # significant locations / location-aware reminders
+com.apple.routined [sip-off]                  # significant locations / location-aware reminders
 com.apple.homeenergyd                         # Home Energy widget
 
 # === Time Machine ===
-com.apple.backupd                             # Time Machine core backup daemon
+com.apple.backupd [sip-off]                   # Time Machine core backup daemon
 com.apple.TMHelperAgent                       # Time Machine menu / reminders
-com.apple.backupd-helper                      # Time Machine scheduling helper
+com.apple.backupd-helper [sip-off]            # Time Machine scheduling helper
 
 # === Focus / DND / Screen Time ===
-com.apple.donotdisturbd                       # Focus modes / Do Not Disturb
-com.apple.ScreenTimeAgent                     # Screen Time
+com.apple.donotdisturbd [sip-off]             # Focus modes / Do Not Disturb
+com.apple.ScreenTimeAgent [sip-off]           # Screen Time
 com.apple.ScreenTimeSettingsAgent             # Screen Time settings UI agent
-com.apple.ManagedSettingsAgent                # Screen Time app limits
-com.apple.UsageTrackingAgent                  # device usage tracking (Screen Time data)
-com.apple.StatusKitAgent                      # share Focus status (iMessage)
+com.apple.ManagedSettingsAgent [sip-off]      # Screen Time app limits
+com.apple.UsageTrackingAgent [sip-off]        # device usage tracking (Screen Time data)
+com.apple.StatusKitAgent [sip-off]            # share Focus status (iMessage)
 
 # === Apple Media Services / iPhone telephony / contacts [balanced] ===
-com.apple.CommCenter                          # iPhone cellular call relay (no iPhone)
+com.apple.CommCenter [sip-off]                # iPhone cellular call relay (no iPhone)
 com.apple.contacts.postersyncd                # Contacts profile picture sync
 
 # === More AI/ML stragglers [balanced] ===
@@ -211,25 +211,25 @@ com.apple.mlhostd                             # ML host daemon
 
 # === Cosmetic / app daemons [balanced] ===
 com.apple.powerchime                          # laptop charging chime sound
-com.apple.talagent                            # app relaunch / window restore at login
-com.apple.shazamd                             # Shazam music recognition (Control Center)
+com.apple.talagent [sip-off]                  # app relaunch / window restore at login
+com.apple.shazamd [sip-off]                   # Shazam music recognition (Control Center)
 
 # === Safari (no Safari use) ===
-com.apple.Safari.SafeBrowsing.Service         # Safari Safe Browsing list updates
+com.apple.Safari.SafeBrowsing.Service [sip-off] # Safari Safe Browsing list updates
 com.apple.SafariBookmarksSyncAgent            # Safari bookmarks iCloud sync
 com.apple.SafariLaunchAgent                   # Safari startup agent
 
 # === More AI / Apple Intelligence [balanced] ===
-com.apple.siriactionsd                        # Siri Shortcuts/Voice Shortcuts agent
-com.apple.ContextStoreAgent                   # CoreDuet ContextStoreAgent
-com.apple.corespeechd                         # Core Speech backbone (Siri/dictation)
-com.apple.corespeechd_system                  # Core Speech system variant
+com.apple.siriactionsd [sip-off]              # Siri Shortcuts/Voice Shortcuts agent
+com.apple.ContextStoreAgent [sip-off]         # CoreDuet ContextStoreAgent
+com.apple.corespeechd [sip-off]               # Core Speech backbone (Siri/dictation)
+com.apple.corespeechd_system [sip-off]        # Core Speech system variant
 com.apple.speech.synthesisserver              # speech synthesis server
 com.apple.spotlightknowledged                 # CoreSpotlight semantic search
 com.apple.spotlightknowledged.importer        # CoreSpotlight importer
-com.apple.spotlightknowledged.updater         # CoreSpotlight updater
+com.apple.spotlightknowledged.updater [sip-off] # CoreSpotlight updater
 com.apple.callintelligenced                   # AI call analysis (call summaries)
-com.apple.intelligenceflowd                   # AI flow daemon
+com.apple.intelligenceflowd [sip-off]         # AI flow daemon
 com.apple.intelligencetasksd                  # AI tasks daemon
 com.apple.synapse.contentlinkingd             # Notes / Safari content links (backlinks)
 com.apple.LinkedNotesUIService                # Notes backlink indicator UI (~26 MB)
@@ -252,27 +252,27 @@ com.apple.metadata.mdflagwriter               # Spotlight flag writer
 com.apple.metadata.mdwrite                    # Spotlight metadata writer
 
 # === Apple Music / iTunes / Media streaming ===
-com.apple.itunescloudd                        # Apple Music / iTunes Match cloud
+com.apple.itunescloudd [sip-off]              # Apple Music / iTunes Match cloud
 com.apple.musicd                              # Apple Music local daemon
 com.apple.amp.mediasharingd                   # Apple Music sharing
 com.apple.mediastream.mstreamd                # iCloud media stream
 com.apple.mediacontinuityd                    # media Continuity (no iPhone)
-com.apple.mediaremoted                        # media keys / now-playing
-com.apple.mediaremoteagent                    # media remote agent
+com.apple.mediaremoted [sip-off]              # media keys / now-playing
+com.apple.mediaremoteagent [sip-off]          # media remote agent
 
 # === Apple ID / Apple Pay / SSO ===
-com.apple.appleaccountd                       # Apple ID account daemon
+com.apple.appleaccountd [sip-off]             # Apple ID account daemon
 com.apple.passd                               # Wallet / Apple Pay
 com.apple.AppSSODaemon                        # Apple SSO Daemon
 com.apple.financed                            # Wallet / Apple Card finance data
 com.apple.adid                                # Apple Device Identity (CoreADI) — iCloud auth, not ads
-com.apple.identityservicesd                   # Apple ID identity (iMessage/FaceTime)
+com.apple.identityservicesd [sip-off]         # Apple ID identity (iMessage/FaceTime)
 com.apple.AppSSOAgent                         # Apple SSO extensions
 
 # === App Store full kill (re-enable when needed) ===
 com.apple.appstored                           # App Store daemon
 com.apple.appstorecomponentsd                 # App Store components
-com.apple.commerce                            # App Store commerce / purchases
+com.apple.commerce [sip-off]                  # App Store commerce / purchases
 com.apple.storeaccountd                       # App Store account
 com.apple.storeassetd                         # App Store assets
 com.apple.storedownloadd                      # App Store downloads
@@ -280,13 +280,13 @@ com.apple.storekitagent                       # StoreKit purchases
 com.apple.storelegacy                         # legacy iTunes Store
 com.apple.storereceiptinstaller               # app receipt installer
 com.apple.storeuid                            # App Store UI daemon
-com.apple.appplaceholdersyncd                 # app placeholder sync
+com.apple.appplaceholdersyncd [sip-off]       # app placeholder sync
 com.apple.appstoreagent                       # App Store agent
-com.apple.amsaccountsd                        # Apple Media Services account state
+com.apple.amsaccountsd [sip-off]              # Apple Media Services account state
 com.apple.amsondevicestoraged                 # App Store on-device storage scan
 
 # === iCloud user-facing notifications [balanced] ===
-com.apple.iCloudNotificationAgent             # iCloud notification UI
+com.apple.iCloudNotificationAgent [sip-off]   # iCloud notification UI
 com.apple.iCloudUserNotificationsd            # iCloud user notifications
 com.apple.icloudmailagent                     # iCloud Mail (no Apple Mail)
 com.apple.FollowUpUI                          # Apple ID nag UI
@@ -296,20 +296,20 @@ com.apple.bookassetd                          # Apple Books asset downloads
 com.apple.bookdatastored                      # Apple Books data store
 
 # === Telemetry extras [telemetry] ===
-com.apple.geoanalyticsd                       # Geo telemetry
-com.apple.SubmitDiagInfo                      # diagnostic submitter to Apple
-com.apple.BiomeAgent                          # biome event hub agent
-com.apple.biomed                              # biome event hub daemon
+com.apple.geoanalyticsd [sip-off]             # Geo telemetry
+com.apple.SubmitDiagInfo [sip-off]            # diagnostic submitter to Apple
+com.apple.BiomeAgent [sip-off]                # biome event hub agent
+com.apple.biomed [sip-off]                    # biome event hub daemon
 
 # === Contacts/Photos extras ===
-com.apple.contacts.donation-agent             # Contacts → Siri Suggestions feed
-com.apple.photolibraryd                       # Photos library daemon
+com.apple.contacts.donation-agent [sip-off]   # Contacts → Siri Suggestions feed
+com.apple.photolibraryd [sip-off]             # Photos library daemon
 
 # === Filesystem / cosmetic [balanced] ===
 com.apple.filesystems.fskitd                  # File System Kit core (3rd-party FS plugins)
 com.apple.fskit.fskit_agent                   # FSKit agent
 com.apple.fskit.fskit_helper                  # FSKit helper
-com.apple.chronod                             # widget host (widgets gone, demand-loaded by NC)
+com.apple.chronod [sip-off]                   # widget host (widgets gone, demand-loaded by NC)
 
 # === Contacts / AddressBook (no Mac Contacts use) ===
 com.apple.AddressBook.AssistantService        # Contacts assistant
@@ -328,7 +328,7 @@ com.apple.appleseed.seedusaged                # AppleSeed usage telemetry
 com.apple.appleseed.seedusaged.postinstall    # AppleSeed postinstall
 com.apple.betaenrollmentagent                 # beta enrollment agent
 com.apple.betaenrollmentd                     # beta enrollment daemon
-com.apple.feedbackd                           # Feedback Assistant daemon
+com.apple.feedbackd [sip-off]                 # Feedback Assistant daemon
 
 # === Game controllers (no gamepad attached) ===
 com.apple.GameController.gamecontrolleragentd # game controller agent
@@ -342,7 +342,7 @@ com.apple.sidecar-display-agent               # Sidecar display agent
 com.apple.sidecar-relay                       # Sidecar relay
 
 # === Continuity Capture (no iPhone webcam) [balanced] ===
-com.apple.cmio.ContinuityCaptureAgent         # iPhone as webcam agent
+com.apple.cmio.ContinuityCaptureAgent [sip-off] # iPhone as webcam agent
 com.apple.companiond                          # Apple Watch / iPhone companion
 
 # === Avatar / Memoji / Stickers (no iMessage) [balanced] ===
@@ -362,7 +362,7 @@ com.apple.FamilyControlsAgent                 # family controls agent
 com.apple.familynotificationd                 # family notifications
 com.apple.parentalcontrols.check              # parental controls checker
 com.apple.askpermissiond                      # family purchase approval (Ask to Buy)
-com.apple.assessmentagent                     # education assessment mode
+com.apple.assessmentagent [sip-off]           # education assessment mode
 com.apple.progressd                           # ClassKit education progress
 
 # === Proactive / Siri-adjacent (no Siri) [balanced] ===
@@ -372,7 +372,7 @@ com.apple.knowledgeconstructiond              # knowledge graph construction
 com.apple.reversetemplated                    # reverse template AI
 
 # === AirPlay sender UI [balanced] ===
-com.apple.AirPlayUIAgent                      # AirPlay sender UI (sending to Apple TV)
+com.apple.AirPlayUIAgent [sip-off]            # AirPlay sender UI (sending to Apple TV)
 
 # === Sports / News extras [balanced] ===
 com.apple.sportsd                             # Apple Sports data
@@ -383,31 +383,31 @@ com.apple.fairplaydeviceidentityd             # FairPlay device identity
 
 # === Diagnostics extras (all telemetry to Apple) [telemetry] ===
 com.apple.diagnosticd                         # diagnostics
-com.apple.diagnosticextensionsd               # diagnostic extensions
-com.apple.diagnostics_agent                   # diagnostics agent
+com.apple.diagnosticextensionsd [sip-off]     # diagnostic extensions
+com.apple.diagnostics_agent [sip-off]         # diagnostics agent
 com.apple.diagnosticservicesd                 # diagnostic services
 com.apple.diagnosticspushd                    # diagnostic push
 com.apple.metrickitd                          # MetricKit (app metrics to Apple)
-com.apple.osanalytics.osanalyticshelper       # OS analytics helper
+com.apple.osanalytics.osanalyticshelper [sip-off] # OS analytics helper
 com.apple.spindump_agent                      # spindump agent (process hangs)
 com.apple.metadata.mds.spindump               # Spotlight spindump diagnostic
 com.apple.diagnosticextensions.osx.spotlight.helper  # Spotlight diagnostic extension
-com.apple.audioanalyticsd                     # audio analytics
-com.apple.inputanalyticsd                     # input analytics (typing/touch)
+com.apple.audioanalyticsd [sip-off]           # audio analytics
+com.apple.inputanalyticsd [sip-off]           # input analytics (typing/touch)
 com.apple.ecosystemanalyticsd                 # ecosystem analytics
 com.apple.perfpowermetricd                    # perf/power metrics
-com.apple.analyticsagent                      # analytics agent
-com.apple.CrashReporterSupportHelper          # crash reporter support
+com.apple.analyticsagent [sip-off]            # analytics agent
+com.apple.CrashReporterSupportHelper [sip-off] # crash reporter support
 com.apple.DiagnosticsReporter                 # diagnostics reporter
 com.apple.InstallerDiagnostics.installerdiagd # installer diagnostics
 com.apple.InstallerDiagnostics.installerdiagwatcher  # installer diag watcher
 com.apple.loginwindow.LWWeeklyMessageTracer   # weekly login telemetry
-com.apple.symptomsd-diag                      # symptoms diag (keep core symptomsd)
+com.apple.symptomsd-diag [sip-off]            # symptoms diag (keep core symptomsd)
 com.apple.symptomsd.distributed-agent         # symptoms distributed agent
-com.apple.rtcreportingd                       # FaceTime/WebRTC call quality reports
+com.apple.rtcreportingd [sip-off]             # FaceTime/WebRTC call quality reports
 com.apple.securityuploadd                     # security telemetry upload
 com.apple.usbctelemetryd                      # USB-C port telemetry
-com.apple.systemstats.analysis                # system stats analysis
+com.apple.systemstats.analysis [sip-off]      # system stats analysis
 com.apple.systemstats.daily                   # daily system stats
 com.apple.systemstats.microstackshot_periodic # periodic microstackshots
 com.apple.powerlogHelperd                     # battery usage logging (Settings battery graph)
@@ -419,21 +419,21 @@ com.apple.softwareupdate_firstrun_tasks       # one-shot first-boot SU tasks
 
 # === Misc Apple legacy / unused [balanced] ===
 com.apple.AOSPushRelay                        # legacy iCloud push relay
-com.apple.nfcd                                # NFC daemon (no Apple Pay)
+com.apple.nfcd [sip-off]                      # NFC daemon (no Apple Pay)
 com.apple.facetimemessagestored               # FaceTime message store
 com.apple.calendar.CalendarAgentBookmarkMigrationService  # one-shot Cal bookmark migration
 
 # === Apple ID auth (kill — re-enable when needed for App Store) ===
-com.apple.akd                                 # AuthKit (Apple ID) — re-enable when logging into App Store
+com.apple.akd [sip-off]                       # AuthKit (Apple ID) — re-enable when logging into App Store
 
 # === Apple Translate / Notes / VoiceOver / accessibility extras [balanced] ===
 com.apple.translationd                        # Apple Translate API (Translate app, Safari translate)
 com.apple.notes.exchangenotesd                # Apple Notes Exchange sync
 com.apple.VoiceOver                           # screen reader (no accessibility use)
 com.apple.accessibility.LiveTranscriptionAgent  # live transcription/captions
-com.apple.accessibility.axassetsd              # TTS voice + VoiceOver/Magnifier model asset downloads
+com.apple.accessibility.axassetsd [sip-off]   # TTS voice + VoiceOver/Magnifier model asset downloads
 com.apple.DictationIM                         # dictation input method
-com.apple.voicebankingd                       # custom voice creation (Live Speech)
+com.apple.voicebankingd [sip-off]             # custom voice creation (Live Speech)
 com.apple.voicememod                          # Voice Memos app
 
 # === iCloud settings / language assets ===
@@ -443,7 +443,7 @@ com.apple.erasecontentsettingshelperd         # Erase All Content (only used for
 
 # === Apple TV watchlist / social / WiFi telemetry [balanced] ===
 com.apple.watchlistd                          # Apple TV+ watchlist
-com.apple.sociallayerd                        # Game Center social layer
+com.apple.sociallayerd [sip-off]              # Game Center social layer
 com.apple.wifianalyticsd                      # WiFi telemetry
 
 # === T2 / bridgeOS ===
@@ -465,7 +465,7 @@ com.apple.dt.automationmode-writer            # Xcode automation writer
 
 # === Apple Music Player (AMP) suite — no Apple Music ===
 com.apple.AMPArtworkAgent                     # album artwork
-com.apple.AMPDeviceDiscoveryAgent             # Apple Music device discovery (not AirPods BT)
+com.apple.AMPDeviceDiscoveryAgent [sip-off]   # Apple Music device discovery (not AirPods BT)
 com.apple.AMPDevicesAgent                     # Apple Music devices agent
 com.apple.AMPLibraryAgent                     # Apple Music library
 com.apple.AMPSystemPlayerAgent                # system music player agent
@@ -481,7 +481,7 @@ com.apple.SpacesTouchBarAgent.app             # Touch Bar Spaces agent
 com.apple.accessibility.dfrhud                # Touch Bar accessibility HUD
 
 # === Continuity Data Protocol (no iPhone) [balanced] ===
-com.apple.cdpd                                # Continuity Data Protocol
+com.apple.cdpd [sip-off]                      # Continuity Data Protocol
 
 # === Safari Web Inspector / WebKit push (no Safari) ===
 com.apple.webinspectord                       # Safari Web Inspector
@@ -491,9 +491,9 @@ com.apple.webkit.webpushd                     # WebKit push (Safari web notifica
 com.apple.peopled                             # People framework (face detection in Photos)
 
 # === iCloud Drive / Keychain Circle / SyncedDefaults / CloudDocs ===
-com.apple.bird                                # iCloud Drive sync daemon
+com.apple.bird [sip-off]                      # iCloud Drive sync daemon
 com.apple.security.keychain-circle-notification  # iCloud Keychain notification
-com.apple.syncdefaultsd                       # iCloud synced defaults (app prefs)
+com.apple.syncdefaultsd [sip-off]             # iCloud synced defaults (app prefs)
 
 # === MDM / Managed apps (no MDM enrollment) [balanced] ===
 com.apple.managedappdistributionagent         # managed app distribution agent
@@ -503,7 +503,7 @@ com.apple.managedappdistributiond             # managed app distribution daemon
 com.apple.milod                               # Migration assistant daemon
 
 # === extra Time Machine replicator label ===
-com.apple.replicatord                         # Time Machine replicator (alt label)
+com.apple.replicatord [sip-off]               # Time Machine replicator (alt label)
 """
 
 USER_LABELS_FILE = BACKUP_DIR / "labels.txt"
@@ -528,6 +528,8 @@ class Item:
     domains: set[str] = field(default_factory=set)
     action: str = ""
     state: str = ""
+    is_sip_off_required: bool = False
+    is_locked: bool = False
 
 
 @dataclass
@@ -571,6 +573,9 @@ def parse_section_header(raw_title: str) -> Section:
     return Section(title=title, preset=preset, macos=macos)
 
 
+SIP_OFF_TAG = "[sip-off]"
+
+
 def parse_labels(source: Path | str) -> list[Section]:
     text = source.read_text() if isinstance(source, Path) else source
     sections: list[Section] = []
@@ -594,8 +599,12 @@ def parse_labels(source: Path | str) -> list[Section]:
         else:
             label = line.strip()
             comment = ""
+        is_sip_off_required = label.endswith(SIP_OFF_TAG)
+        if is_sip_off_required:
+            label = label[:-len(SIP_OFF_TAG)].strip()
         if label:
-            current.items.append(Item(label=label, comment=comment, section=current.title))
+            current.items.append(Item(label=label, comment=comment, section=current.title,
+                                      is_sip_off_required=is_sip_off_required))
     if current.items:
         sections.append(current)
     return sections
@@ -1019,6 +1028,43 @@ def reopen_tty_stdin() -> bool:
     return True
 
 
+def is_sip_enabled() -> bool:
+    r = subprocess.run(["csrutil", "status"], capture_output=True, text=True, check=False)
+    return "disabled" not in r.stdout
+
+
+def lock_sip_rows(sections: list[Section], is_sip_on: bool) -> int:
+    """With SIP on, a `[sip-off]` label is restarted by launchd within seconds of
+    a disable, so it can't be switched off — only back on. Returns the count."""
+    locked = 0
+    for sec in sections:
+        for it in sec.items:
+            it.is_locked = is_sip_on and it.is_sip_off_required
+            locked += it.is_locked
+    return locked
+
+
+def keep_locked_on(sections: list[Section]) -> int:
+    """Undo any selection that would switch a locked label off."""
+    kept = 0
+    for sec in sections:
+        for it in sec.items:
+            if it.is_locked and not it.selected and not it.disabled:
+                it.selected = True
+                kept += 1
+    return kept
+
+
+SIP_COST = ("iPhone/iPad apps stop running on this Mac, and root processes can modify "
+            "system files and load unsigned kernel extensions")
+
+
+def set_sip(is_on: bool) -> int:
+    """`csrutil` asks y/n, an admin user and their password on the terminal."""
+    r = subprocess.run(["sudo", "csrutil", "enable" if is_on else "disable"], check=False)
+    return r.returncode
+
+
 def prime_sudo() -> bool:
     result = subprocess.run(["sudo", "-v"], check=False)
     return result.returncode == 0
@@ -1122,6 +1168,18 @@ def menu_section(sections: list[Section]) -> Section:
         items.append(Item(
             label="enable all", section=MENU_SECTION, action="enable-all",
             comment=f"turn all {len(flat)} labels back on — the panic button"))
+    locked = sum(it.is_locked for it in flat)
+    needs_sip = sum(it.is_sip_off_required for it in flat)
+    if locked:
+        items.append(Item(
+            label="disable SIP", section=MENU_SECTION, action="sip-off",
+            comment=f"unlock the {locked} greyed-out labels — {SIP_COST}; asks your password, "
+                    f"then a restart"))
+    elif needs_sip:
+        items.append(Item(
+            label="enable SIP", section=MENU_SECTION, action="sip-on",
+            comment=f"turn System Integrity Protection back on (restart); the {needs_sip} "
+                    f"SIP-only labels come back at the next boot"))
     return Section(title=MENU_SECTION, items=items)
 
 
@@ -1133,12 +1191,14 @@ def select_for_action(sections: list[Section], action: str) -> str:
     if action in ("disable-all", "enable-all"):
         for it in flat:
             it.selected = action == "enable-all"
-        return action.replace("-", " ")
+        kept = keep_locked_on(sections)
+        return action.replace("-", " ") + (f" ({kept} need SIP off, skipped)" if kept else "")
     name = action.split(":", 1)[1]
     wanted = {it.label for sec in resolve_preset(sections, name) for it in sec.items}
     for it in flat:
         it.selected = it.label not in wanted and not it.disabled
-    return f"preset {name}"
+    kept = keep_locked_on(sections)
+    return f"preset {name}" + (f" ({kept} need SIP off, skipped)" if kept else "")
 
 
 def jump_section(sections: list[Section], flat: list[Item], cursor: int, direction: int) -> int:
@@ -1244,9 +1304,10 @@ def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list
             else:
                 mark = "[✓]" if it.selected else "[ ]"
                 changed = " *" if it.selected == it.disabled else "  "
-                text = f"{changed}{mark}  {it.label:<48}  {it.comment}"
+                note = "needs SIP off · " if it.is_locked else ""
+                text = f"{changed}{mark}  {it.label:<48}  {note}{it.comment}"
             is_cursor = item_by_id.get(id(it)) == cursor
-            attr = curses.A_REVERSE if is_cursor else curses.A_NORMAL
+            attr = curses.A_REVERSE if is_cursor else curses.A_DIM if it.is_locked else curses.A_NORMAL
             stdscr.addnstr(y, 0, text[:w - 1], w - 1, attr)
         # blank: leave row empty
 
@@ -1262,7 +1323,11 @@ def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list
             pass
 
     current = flat[cursor]
-    explanation = textwrap.wrap(f"{current.label}: {current.comment}", w - 1)[:2]
+    about = current.comment
+    if current.is_locked:
+        about = ("with SIP on, macOS restarts this within seconds of a disable — "
+                 "'disable SIP' at the top unlocks it. " + about)
+    explanation = textwrap.wrap(f"{current.label}: {about}", w - 1)[:2]
     try:
         for n, line in enumerate(explanation):
             stdscr.addnstr(h - 3 + n, 0, line, w - 1, curses.A_DIM)
@@ -1322,8 +1387,11 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
         elif c == curses.KEY_PPAGE:
             cursor = max(cursor - 10, 0)
         elif c == ord(" "):
-            if not flat[cursor].action:
-                flat[cursor].selected = not flat[cursor].selected
+            row = flat[cursor]
+            if row.is_locked and row.selected:
+                status = f"{row.label} needs SIP off — see 'disable SIP' at the top"
+            elif not row.action:
+                row.selected = not row.selected
         elif c == ord("]"):
             cursor = jump_section(view, flat, cursor, direction=1)
         elif c == ord("["):
@@ -1334,6 +1402,31 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             status = "state reloaded"
         elif c in (curses.KEY_ENTER, 10, 13):
             action = flat[cursor].action
+            if action in ("sip-off", "sip-on"):
+                h, w = stdscr.getmaxyx()
+                ask = (f"turn SIP off? {SIP_COST}  [y/N]" if action == "sip-off"
+                       else "turn SIP back on? SIP-only labels come back at the next boot  [y/N]")
+                stdscr.move(h - 1, 0)
+                stdscr.clrtoeol()
+                stdscr.addnstr(h - 1, 0, ask[:w - 1], w - 1, curses.A_REVERSE)
+                stdscr.refresh()
+                stdscr.timeout(-1)
+                if stdscr.getch() not in (ord("y"), ord("Y")):
+                    status = "SIP unchanged"
+                    continue
+                curses.def_prog_mode()
+                stdscr.move(h - 1, 0)
+                stdscr.clrtoeol()
+                stdscr.refresh()
+                curses.curs_set(1)
+                code = set_sip(is_on=action == "sip-on")
+                curses.curs_set(0)
+                curses.reset_prog_mode()
+                stdscr.redrawwin()
+                stdscr.refresh()
+                status = ("csrutil failed — SIP unchanged" if code else
+                          "done — restart the Mac for it to take effect, then run debloat again")
+                continue
             if action == "disable-all":
                 h, w = stdscr.getmaxyx()
                 ask = (f"disable all {len(flat_index(sections))} labels? iCloud login, App "
@@ -1481,6 +1574,8 @@ def cmd_status(sections: list[Section], as_json: bool) -> int:
             "spotlight": spot,
             "reclaimable_ram_mb": free,
             "persist": persist_status(),
+            "sip": {"enabled": is_sip_enabled(),
+                    "locked": sum(it.is_locked for sec in sections for it in sec.items)},
         }, indent=2))
         return 0
     print(f"catalog: {stats.total} labels in {stats.sections} sections "
@@ -1492,6 +1587,12 @@ def cmd_status(sections: list[Section], as_json: bool) -> int:
         print(f"  disabled but running anyway: {len(ignored)}   "
               f"(launchd started these despite the override)")
     print(f"spotlight: {spot}")
+    locked = sum(it.is_locked for sec in sections for it in sec.items)
+    if locked:
+        print(f"SIP: on — {locked} labels need it off to stay disabled "
+              f"(`debloat --disable-sip`)")
+    else:
+        print(f"SIP: {'on' if is_sip_enabled() else 'off'}")
     persist = persist_status()
     if persist["installed"]:
         line = f"persist: on, {persist['labels']} services re-disabled at every boot"
@@ -1713,7 +1814,8 @@ def format_labels(sections: list[Section]) -> str:
     for sec in sections:
         lines.append(f"# === {sec.title} ===")
         for it in sec.items:
-            lines.append(f"{it.label.ljust(45)} # {it.comment}" if it.comment else it.label)
+            name = f"{it.label} {SIP_OFF_TAG}" if it.is_sip_off_required else it.label
+            lines.append(f"{name.ljust(45)} # {it.comment}" if it.comment else name)
         lines.append("")
     return "\n".join(lines)
 
@@ -1752,6 +1854,9 @@ def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
               f"{USER_LABELS_FILE}:", file=sys.stderr)
         for label in unknown:
             print(f"  {label}", file=sys.stderr)
+    kept = keep_locked_on(sections)
+    if kept:
+        print(f"{kept} labels need SIP off and were left on (`debloat --disable-sip`)")
     return run_apply(sections, dry_run)
 
 
@@ -1776,6 +1881,9 @@ Usage:
   debloat --enable-all    re-enable everything — the panic button
   debloat --restore       revert to the state before your last apply
   debloat --persist       re-disable what you disabled at every boot (sudo once)
+  debloat --disable-sip   turn SIP off (csrutil asks your password; then restart)
+                          unlocks the labels marked [sip-off] in --list
+  debloat --enable-sip    turn SIP back on (restart)
   debloat --no-persist    remove the boot daemon and its files
   debloat --dry-run       with --preset/--disable-all/--enable-all: preview only
   debloat --json          with --status: machine-readable output
@@ -1833,6 +1941,21 @@ def main() -> int:
 
     dry_run = "--dry-run" in argv
     as_json = "--json" in argv
+    is_sip_on = is_sip_enabled()
+    lock_sip_rows(sections, is_sip_on)
+
+    if "--disable-sip" in argv or "--enable-sip" in argv:
+        is_on = "--enable-sip" in argv
+        if is_on == is_sip_on:
+            print(f"SIP is already {'on' if is_on else 'off'}")
+            return 0
+        if not is_on:
+            print(f"Turning SIP off: {SIP_COST}. csrutil asks y/n, an admin user "
+                  f"and that user's password.")
+        code = set_sip(is_on)
+        if code == 0:
+            print("restart the Mac for it to take effect")
+        return code
 
     preset_name = ""
     if "--preset" in argv:
@@ -1878,6 +2001,9 @@ def main() -> int:
         for sec in sections:
             for it in sec.items:
                 it.selected = want_enabled
+        kept = keep_locked_on(sections)
+        if kept:
+            print(f"{kept} labels need SIP off and were left on (`debloat --disable-sip`)")
         return run_apply(sections, dry_run)
     if preset_name:
         return cmd_preset(sections, preset_name, dry_run)

@@ -348,6 +348,7 @@ class CommandLineTest(FakeMachineTest):
         self.debloat.USER_LABELS_FILE = self.debloat.BACKUP_DIR / "labels.txt"
         self.debloat.PRESETS_DIR.mkdir(parents=True)
         self.debloat.mem_free_mb = lambda: 4096
+        self.debloat.is_sip_enabled = lambda: True
 
     def run_cli(self, *argv) -> tuple[int, str]:
         original = sys.argv
@@ -388,6 +389,25 @@ class CommandLineTest(FakeMachineTest):
         self.assertEqual(self.machine.commands(),
                          ["disable system/com.example.telemetry",
                           "bootout system/com.example.telemetry"])
+
+    def test_sip_on_never_switches_off_a_sip_off_label_but_can_switch_it_back_on(self):
+        """With SIP on launchd restarts a [sip-off] label within seconds, so a
+        preset or --disable-all must leave it running — and --enable-all must
+        still be able to undo one that was disabled while SIP was off."""
+        self.debloat.EMBEDDED_LABELS = (
+            "# === Telemetry [telemetry] ===\n"
+            "com.example.telemetry             # analytics\n"
+            "com.example.respawner [sip-off]   # restarted on demand\n"
+        )
+        self.machine.add("com.example.telemetry", daemon_plist=True, registered=["system"])
+        self.machine.add("com.example.respawner", daemon_plist=True, registered=["system"])
+        for argv in (("--preset", "telemetry"), ("--disable-all",)):
+            self.run_cli(*argv)
+            self.assertNotIn("disable system/com.example.respawner", self.machine.commands())
+        self.machine.state["domains"]["system"]["disabled"].append("com.example.respawner")
+        self.machine.flush()
+        self.run_cli("--enable-all")
+        self.assertIn("enable system/com.example.respawner", self.machine.commands())
 
     def test_restore_puts_back_exactly_the_pre_apply_state(self):
         self.two_labels()
