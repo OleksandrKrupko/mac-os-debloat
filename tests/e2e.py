@@ -355,8 +355,20 @@ def label_table(report: dict) -> str:
     return "\n".join(rows) + "\n"
 
 
+def watch_after_boot(vm: VM, labels: list[str], baseline: dict, report: dict, prefix: str,
+                     watch: list[int]) -> None:
+    """Snapshot and judge at each offset (seconds) after the boot that just finished."""
+    booted = time.time()
+    for offset in watch:
+        time.sleep(max(0.0, booted + offset - time.time()))
+        snap = snapshot(vm, labels, f"{prefix}, {offset}s after boot")
+        report["snapshots"].append(snap)
+        report["checks"].append(judge(snap, baseline, expect_disabled=True))
+    report["boot_logs"].append({"step": prefix, "lines": boot_log(vm)})
+
+
 def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, cycles: int,
-                 settle: int, out: Path, workdir: Path, keep: bool) -> bool:
+                 settle: int, watch: list[int], out: Path, workdir: Path, keep: bool) -> bool:
     base = base_name(os_version, sip_wanted)
     if base not in local_vms():
         raise SystemExit(f"no base image {base}; run `python3 tests/e2e.py prepare --os {os_version}"
@@ -420,10 +432,7 @@ def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, c
             for n in range(1, cycles + 1):
                 log(f"persist: reboot {n}/{cycles}")
                 vm.reboot()
-                time.sleep(settle)
-                early = snapshot(vm, labels, f"reboot {n}, {settle}s after boot")
-                report["snapshots"].append(early)
-                report["checks"].append(judge(early, baseline, expect_disabled=True))
+                watch_after_boot(vm, labels, baseline, report, f"reboot {n}", watch)
                 deadline = time.time() + 900
                 while time.time() < deadline:
                     last = vm.sh("cat '/Library/Application Support/mac-os-debloat/last-run.json'",
@@ -433,11 +442,7 @@ def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, c
                     time.sleep(15)
                 else:
                     raise RuntimeError("boot daemon did not finish its passes in 15 minutes")
-                done = snapshot(vm, labels, f"reboot {n}, after the daemon's last pass")
-                report["snapshots"].append(done)
                 report.setdefault("daemon_runs", []).append(json.loads(last.stdout))
-                report["boot_logs"].append({"step": done["step"], "lines": boot_log(vm)})
-                report["checks"].append(judge(done, baseline, expect_disabled=True))
                 vm.sh("sudo rm -f '/Library/Application Support/mac-os-debloat/last-run.json'")
             report["enable_all_output"] = vm.sh(f"python3 {GUEST_DEBLOAT} --enable-all 2>&1").stdout
             leftovers = vm.sh("ls -d /Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist "
@@ -472,10 +477,7 @@ def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, c
                                      "sip_now": leftover or "removed", "ok": not leftover})
             for n in range(1, cycles + 1):
                 vm.reboot()
-                time.sleep(settle)
-                snap = snapshot(vm, labels, f"SIP off, --disable-all, reboot {n}")
-                report["snapshots"].append(snap)
-                report["checks"].append(judge(snap, baseline, expect_disabled=True))
+                watch_after_boot(vm, labels, baseline, report, f"SIP off, --disable-all, reboot {n}", watch)
             vm.sh(f"python3 {GUEST_DEBLOAT} --enable-all 2>&1", check=False)
             report["enable_sip_output"] = answer_csrutil(vm, f"python3 {GUEST_DEBLOAT} --enable-sip")
             vm.reboot()
@@ -491,11 +493,7 @@ def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, c
                 step = f"after {'reboot' if scenario == 'reboot' else 'power-off + cold boot'} {n}"
                 log(f"{scenario}: cycle {n}/{cycles}")
                 vm.reboot() if scenario == "reboot" else vm.poweroff_and_boot()
-                time.sleep(settle)
-                snap = snapshot(vm, labels, step)
-                report["snapshots"].append(snap)
-                report["boot_logs"].append({"step": step, "lines": boot_log(vm)})
-                report["checks"].append(judge(snap, baseline, expect_disabled=True))
+                watch_after_boot(vm, labels, baseline, report, step, watch)
     finally:
         vm.stop()
         if not keep:
@@ -547,6 +545,8 @@ def main() -> int:
                    help="telemetry, balanced, a custom preset name, or disable-all for every label")
     r.add_argument("--cycles", type=int, default=2, help="reboots / cold boots per scenario")
     r.add_argument("--settle", type=int, default=60, help="seconds to wait after an apply or a boot before judging again")
+    r.add_argument("--watch", default="60",
+                   help="comma-separated seconds after each boot to judge at, e.g. 60,300,600")
     r.add_argument("--out", type=Path, help="evidence dir (default: a new temp dir)")
     r.add_argument("--keep", action="store_true", help="keep the VM clone for inspection")
     args = ap.parse_args()
@@ -557,8 +557,8 @@ def main() -> int:
     out = args.out or workdir
     ok = True
     for scenario in SCENARIOS if args.scenario == "all" else (args.scenario,):
-        ok = run_scenario(scenario, args.os, args.sip, args.preset, args.cycles, args.settle, out,
-                          workdir, args.keep) and ok
+        ok = run_scenario(scenario, args.os, args.sip, args.preset, args.cycles, args.settle,
+                          [int(x) for x in args.watch.split(",")], out, workdir, args.keep) and ok
     log(f"evidence: {out}")
     return 0 if ok else 1
 

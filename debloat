@@ -1059,6 +1059,19 @@ SIP_COST = ("iPhone/iPad apps stop running on this Mac, and root processes can m
             "system files and load unsigned kernel extensions")
 
 
+def recovery_steps(is_on: bool) -> str:
+    """Apple silicon only lowers boot security from Recovery entered with the
+    power button, so a physical Mac can refuse csrutil from macOS."""
+    return f"""csrutil could not change SIP from inside macOS. Do it from Recovery:
+  1. Shut down the Mac.
+  2. Press and hold the power button until "Loading startup options" appears.
+  3. Choose Options, then Continue, and sign in with an admin user.
+  4. From the menu bar: Utilities > Terminal.
+  5. Type: csrutil {'enable' if is_on else 'disable'}   and answer its prompts.
+  6. Restart, then run debloat again.
+"""
+
+
 def set_sip(is_on: bool) -> int:
     """`csrutil` asks y/n, an admin user and their password on the terminal."""
     r = subprocess.run(["sudo", "csrutil", "enable" if is_on else "disable"], check=False)
@@ -1424,8 +1437,11 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
                 curses.reset_prog_mode()
                 stdscr.redrawwin()
                 stdscr.refresh()
-                status = ("csrutil failed — SIP unchanged" if code else
-                          "done — restart the Mac for it to take effect, then run debloat again")
+                if code:
+                    problem_reports.append("\n" + recovery_steps(is_on=action == "sip-on"))
+                    status = "csrutil refused from macOS — Recovery steps are printed when you quit (q)"
+                else:
+                    status = "done — restart the Mac for it to take effect, then run debloat again"
                 continue
             if action == "disable-all":
                 h, w = stdscr.getmaxyx()
@@ -1938,8 +1954,7 @@ def main() -> int:
             print(f"Turning SIP off: {SIP_COST}. csrutil asks y/n, an admin user "
                   f"and that user's password.")
         code = set_sip(is_on)
-        if code == 0:
-            print("restart the Mac for it to take effect")
+        print(recovery_steps(is_on) if code else "restart the Mac for it to take effect")
         return code
 
     preset_name = ""
