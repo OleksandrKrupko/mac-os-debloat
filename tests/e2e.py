@@ -441,7 +441,7 @@ def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, c
                         break
                     time.sleep(15)
                 else:
-                    raise RuntimeError("boot daemon did not finish its passes in 15 minutes")
+                    raise RuntimeError("boot daemon wrote no report in 15 minutes")
                 report.setdefault("daemon_runs", []).append(json.loads(last.stdout))
                 vm.sh("sudo rm -f '/Library/Application Support/mac-os-debloat/last-run.json'")
             report["enable_all_output"] = vm.sh(f"python3 {GUEST_DEBLOAT} --enable-all 2>&1").stdout

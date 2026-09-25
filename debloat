@@ -43,6 +43,8 @@ PERSIST_STATE = PERSIST_DIR / "persist.json"
 PERSIST_REPORT = PERSIST_DIR / "last-run.json"
 PERSIST_PASSES = 5
 PERSIST_PASS_S = 60
+PERSIST_WATCH_S = 300
+PERSIST_REPORT_PASSES = 20
 
 LAUNCHD_DIRS = (
     "/System/Library/LaunchDaemons",
@@ -76,13 +78,13 @@ com.apple.assistant_cdmd [sip-off]            # Siri continuous dialog manager
 com.apple.parsecd [sip-off]                   # Siri/Spotlight suggestions backend
 com.apple.parsec-fbf [sip-off]                # Siri Suggestions feedback
 com.apple.intelligencecontextd                # Apple Intelligence context runtime
-com.apple.intelligenceplatformd               # Apple Intelligence platform
+com.apple.intelligenceplatformd [sip-off]     # Apple Intelligence platform
 com.apple.knowledge-agent [sip-off]           # knowledge graph extraction
 
 # === Apple Intelligence (Tahoe) [balanced] ===
 com.apple.mlruntimed                          # ML runtime
 com.apple.generativeexperiencesd [sip-off]    # Writing Tools / generative AI
-com.apple.privatecloudcomputed                # Private Cloud Compute (AI cloud offload)
+com.apple.privatecloudcomputed [sip-off]      # Private Cloud Compute (AI cloud offload)
 com.apple.modelcatalogd [sip-off]             # AI model catalog daemon
 com.apple.ModelCatalogAgent [sip-off]         # AI model catalog agent
 com.apple.modelmanagerd [sip-off]             # AI model manager / downloads
@@ -151,7 +153,7 @@ com.apple.businessservicesd                   # Apple Business Chat
 
 # === HomeKit ===
 com.apple.homed [sip-off]                     # HomeKit daemon
-com.apple.homeeventsd                         # HomeKit events
+com.apple.homeeventsd [sip-off]               # HomeKit events
 com.apple.threadradiod                        # Thread radio (Matter/HomeKit)
 com.apple.ThreadCommissionerService [sip-off] # Matter device commissioning
 
@@ -182,12 +184,12 @@ com.apple.liveactivitiesd [sip-off]           # Live Activities widgets
 
 # === iCloud (no iCloud use) ===
 com.apple.cloudd [sip-off]                    # iCloud sync core
-com.apple.cloudphotod                         # iCloud Photos sync
+com.apple.cloudphotod [sip-off]               # iCloud Photos sync
 com.apple.icloudwebd                          # iCloud.com / iCloud on the web
 
 # === Location/prediction extras (Find My still intact) [balanced] ===
 com.apple.routined [sip-off]                  # significant locations / location-aware reminders
-com.apple.homeenergyd                         # Home Energy widget
+com.apple.homeenergyd [sip-off]               # Home Energy widget
 
 # === Time Machine ===
 com.apple.backupd [sip-off]                   # Time Machine core backup daemon
@@ -207,7 +209,7 @@ com.apple.CommCenter [sip-off]                # iPhone cellular call relay (no i
 com.apple.contacts.postersyncd                # Contacts profile picture sync
 
 # === More AI/ML stragglers [balanced] ===
-com.apple.mlhostd                             # ML host daemon
+com.apple.mlhostd [sip-off]                   # ML host daemon
 
 # === Cosmetic / app daemons [balanced] ===
 com.apple.powerchime                          # laptop charging chime sound
@@ -216,7 +218,7 @@ com.apple.shazamd [sip-off]                   # Shazam music recognition (Contro
 
 # === Safari (no Safari use) ===
 com.apple.Safari.SafeBrowsing.Service [sip-off] # Safari Safe Browsing list updates
-com.apple.SafariBookmarksSyncAgent            # Safari bookmarks iCloud sync
+com.apple.SafariBookmarksSyncAgent [sip-off]  # Safari bookmarks iCloud sync
 com.apple.SafariLaunchAgent                   # Safari startup agent
 
 # === More AI / Apple Intelligence [balanced] ===
@@ -264,8 +266,8 @@ com.apple.mediaremoteagent [sip-off]          # media remote agent
 com.apple.appleaccountd [sip-off]             # Apple ID account daemon
 com.apple.passd                               # Wallet / Apple Pay
 com.apple.AppSSODaemon                        # Apple SSO Daemon
-com.apple.financed                            # Wallet / Apple Card finance data
-com.apple.adid                                # Apple Device Identity (CoreADI) — iCloud auth, not ads
+com.apple.financed [sip-off]                  # Wallet / Apple Card finance data
+com.apple.adid [sip-off]                      # Apple Device Identity (CoreADI) — iCloud auth, not ads
 com.apple.identityservicesd [sip-off]         # Apple ID identity (iMessage/FaceTime)
 com.apple.AppSSOAgent                         # Apple SSO extensions
 
@@ -281,9 +283,9 @@ com.apple.storelegacy                         # legacy iTunes Store
 com.apple.storereceiptinstaller               # app receipt installer
 com.apple.storeuid                            # App Store UI daemon
 com.apple.appplaceholdersyncd [sip-off]       # app placeholder sync
-com.apple.appstoreagent                       # App Store agent
+com.apple.appstoreagent [sip-off]             # App Store agent
 com.apple.amsaccountsd [sip-off]              # Apple Media Services account state
-com.apple.amsondevicestoraged                 # App Store on-device storage scan
+com.apple.amsondevicestoraged [sip-off]       # App Store on-device storage scan
 
 # === iCloud user-facing notifications [balanced] ===
 com.apple.iCloudNotificationAgent [sip-off]   # iCloud notification UI
@@ -317,7 +319,7 @@ com.apple.AddressBook.SourceSync              # Contacts source sync
 com.apple.AddressBook.abd                     # Contacts daemon
 
 # === Maps (Google Maps user) ===
-com.apple.Maps.mapssyncd                      # Apple Maps sync
+com.apple.Maps.mapssyncd [sip-off]            # Apple Maps sync
 com.apple.Maps.mapspushd                      # Apple Maps push
 com.apple.maps.destinationd                   # Apple Maps destinations
 com.apple.intelligentroutingd                 # intelligent routing (Maps)
@@ -333,8 +335,8 @@ com.apple.feedbackd [sip-off]                 # Feedback Assistant daemon
 # === Game controllers (no gamepad attached) ===
 com.apple.GameController.gamecontrolleragentd # game controller agent
 com.apple.GameController.gamecontrollerd      # game controller daemon
-com.apple.GamePolicyAgent                     # game policy agent
-com.apple.gamepolicyd                         # game policy daemon
+com.apple.GamePolicyAgent [sip-off]           # game policy agent
+com.apple.gamepolicyd [sip-off]               # game policy daemon
 com.apple.gamesaved                           # game saves
 
 # === Sidecar / iPad second display (no iPad) [balanced] ===
@@ -444,7 +446,7 @@ com.apple.erasecontentsettingshelperd         # Erase All Content (only used for
 # === Apple TV watchlist / social / WiFi telemetry [balanced] ===
 com.apple.watchlistd                          # Apple TV+ watchlist
 com.apple.sociallayerd [sip-off]              # Game Center social layer
-com.apple.wifianalyticsd                      # WiFi telemetry
+com.apple.wifianalyticsd [sip-off]            # WiFi telemetry
 
 # === T2 / bridgeOS ===
 # Same labels on T2 Intel and Apple Silicon. Disabling them breaks the
@@ -496,11 +498,11 @@ com.apple.security.keychain-circle-notification  # iCloud Keychain notification
 com.apple.syncdefaultsd [sip-off]             # iCloud synced defaults (app prefs)
 
 # === MDM / Managed apps (no MDM enrollment) [balanced] ===
-com.apple.managedappdistributionagent         # managed app distribution agent
+com.apple.managedappdistributionagent [sip-off] # managed app distribution agent
 com.apple.managedappdistributiond [sip-off]   # managed app distribution daemon
 
 # === Migration / setup leftover [balanced] ===
-com.apple.milod                               # Migration assistant daemon
+com.apple.milod [sip-off]                     # Migration assistant daemon
 
 # === extra Time Machine replicator label ===
 com.apple.replicatord [sip-off]               # Time Machine replicator (alt label)
@@ -1719,9 +1721,10 @@ def kill_label(label: str, pids: list[int]) -> None:
 
 def cmd_persist_run() -> int:
     """The boot daemon, as root: re-disable the saved set before login, again
-    once the user's gui domain exists, then kill whatever still runs — once per
-    label. A label that is running again after its kill respawns on its own and
-    is left alone rather than killed on every pass."""
+    once the user's gui domain exists, then check a minute apart for the first
+    passes and every few minutes after that for as long as the Mac is up. A
+    running label is killed once; one running again after its kill respawns on
+    its own and is left alone rather than killed on every pass."""
     global UID, DOMAINS
     state = json.loads(PERSIST_STATE.read_text())
     UID = state["uid"]
@@ -1747,20 +1750,22 @@ def cmd_persist_run() -> int:
 
     killed: set[str] = set()
     respawners: set[str] = set()
-    for n in range(1, PERSIST_PASSES + 1):
-        time.sleep(PERSIST_PASS_S)
-        reapply(f"pass_{n}_overrides")
+    n = 0
+    while True:
+        n += 1
+        time.sleep(PERSIST_PASS_S if n <= PERSIST_PASSES else PERSIST_WATCH_S)
+        reapply("last_pass_overrides")
         running = running_pids(sorted(wanted))
         fresh = {label: pids for label, pids in running.items() if label not in killed}
         respawners |= set(running) - set(fresh)
         for label, pids in fresh.items():
             kill_label(label, pids)
         killed |= set(fresh)
-        run["passes"].append({"pass": n, "killed": sorted(fresh), "left_running": sorted(respawners)})
+        entry = {"pass": n, "at": time.strftime("%Y-%m-%dT%H:%M:%S"), "killed": sorted(fresh)}
+        run["passes"] = (run["passes"] + [entry])[-PERSIST_REPORT_PASSES:]
+        run["killed_total"] = len(killed)
+        run["respawners"] = sorted(respawners)
         PERSIST_REPORT.write_text(json.dumps(run, indent=2))
-    run["respawners"] = sorted(respawners)
-    PERSIST_REPORT.write_text(json.dumps(run, indent=2))
-    return 0
 
 
 def cmd_restore(sections: list[Section]) -> int:
