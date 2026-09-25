@@ -497,7 +497,7 @@ com.apple.syncdefaultsd [sip-off]             # iCloud synced defaults (app pref
 
 # === MDM / Managed apps (no MDM enrollment) [balanced] ===
 com.apple.managedappdistributionagent         # managed app distribution agent
-com.apple.managedappdistributiond             # managed app distribution daemon
+com.apple.managedappdistributiond [sip-off]   # managed app distribution daemon
 
 # === Migration / setup leftover [balanced] ===
 com.apple.milod                               # Migration assistant daemon
