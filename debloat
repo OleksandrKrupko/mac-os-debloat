@@ -1463,7 +1463,7 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
                 continue
             write_snapshot(sections)
             result = apply_changes(sections, report=in_tui)
-            save_persist_set(sections)
+            daemon_msg = sync_boot_daemon(sections)
             refresh_state(sections)
             spotlight_msg = ""
             if spot.selected == spot.disabled:
@@ -1475,6 +1475,8 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
             )
             if spotlight_msg:
                 status += f"   {spotlight_msg}"
+            if daemon_msg:
+                status += f"   {daemon_msg}"
             report = apply_problems(result)
             if report:
                 problems = (len(result["override_failures"]) + len(result["not_disabled"])
@@ -1541,9 +1543,11 @@ def run_apply(sections: list[Section], dry_run: bool) -> int:
         return 1
     write_snapshot(sections)
     result = apply_changes(sections)
-    save_persist_set(sections)
+    daemon_msg = sync_boot_daemon(sections)
     print(f'applied: {result["disabled"]} disabled, {result["enabled"]} enabled, '
           f'{result["killed"]} killed')
+    if daemon_msg:
+        print(daemon_msg)
     sys.stderr.write(apply_problems(result))
     return 0
 
@@ -1595,7 +1599,7 @@ def cmd_status(sections: list[Section], as_json: bool) -> int:
         print(f"SIP: {'on' if is_sip_enabled() else 'off'}")
     persist = persist_status()
     if persist["installed"]:
-        line = f"persist: on, {persist['labels']} services re-disabled at every boot"
+        line = f"boot daemon: on, {persist['labels']} services re-disabled at every boot"
         if persist["respawners"] is not None:
             line += (f"; last boot left {len(persist['respawners'])} running that "
                      f"respawn when killed")
@@ -1641,26 +1645,16 @@ def sudo_write(path: Path, text: str) -> None:
                    stdout=subprocess.DEVNULL, check=True)
 
 
-def save_persist_set(sections: list[Section]) -> None:
-    """Keep the boot daemon's label set equal to what the user last asked for,
-    so re-enabling a service is never undone at the next boot."""
-    if not PERSIST_PLIST.exists():
-        return
+def sync_boot_daemon(sections: list[Section]) -> str:
+    """With SIP on, launchd drops these overrides at every boot, so while
+    anything is disabled a root daemon re-applies them; with nothing disabled,
+    or SIP off (overrides then persist on their own), it is removed. Called
+    after every apply, with sudo already primed. Returns a line for the user,
+    or "" when nothing about the daemon changed."""
     labels = sorted(it.label for sec in sections for it in sec.items if not it.selected)
-    sudo_write(PERSIST_STATE, json.dumps({"uid": UID, "labels": labels}, indent=2))
-
-
-def cmd_persist(sections: list[Section]) -> int:
-    refresh_state(sections)
-    labels = sorted(it.label for sec in sections for it in sec.items if it.disabled)
-    if not labels:
-        print("nothing is disabled — apply a preset or pick services first, then "
-              "run --persist", file=sys.stderr)
-        return 1
-    if not prime_sudo():
-        print("sudo required to install the boot daemon", file=sys.stderr)
-        return 1
-    plist = f"""<?xml version="1.0" encoding="UTF-8"?>
+    is_installed = PERSIST_PLIST.exists()
+    if labels and is_sip_enabled():
+        plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -1677,33 +1671,26 @@ def cmd_persist(sections: list[Section]) -> int:
 </dict>
 </plist>
 """
-    # Root runs this copy at every boot, so it must not stay writable by the user.
-    subprocess.run(["sudo", "mkdir", "-p", str(PERSIST_DIR)], check=True)
-    subprocess.run(["sudo", "install", "-m", "644", "-o", "root", "-g", "wheel",
-                    str(Path(__file__).resolve()), str(PERSIST_DIR / "debloat")], check=True)
-    sudo_write(PERSIST_STATE, json.dumps({"uid": UID, "labels": labels}, indent=2))
-    sudo_write(PERSIST_PLIST, plist)
-    subprocess.run(["sudo", "chown", "root:wheel", str(PERSIST_PLIST)], check=True)
-    print(f"persist on: {len(labels)} disabled services are re-disabled at every boot, "
-          f"then checked {PERSIST_PASSES}× a minute apart after you log in. "
-          f"`debloat --no-persist` removes it.")
-    return 0
-
-
-def cmd_no_persist() -> int:
-    if not PERSIST_PLIST.exists() and not PERSIST_DIR.exists():
-        print("persist is not installed")
-        return 0
-    if not prime_sudo():
-        print("sudo required to remove the boot daemon", file=sys.stderr)
-        return 1
+        subprocess.run(["sudo", "mkdir", "-p", str(PERSIST_DIR)], capture_output=True, check=True)
+        # Root runs this copy at every boot, so it must not stay writable by the user.
+        subprocess.run(["sudo", "install", "-m", "644", "-o", "root", "-g", "wheel",
+                        str(Path(__file__).resolve()), str(PERSIST_DIR / "debloat")],
+                       capture_output=True, check=True)
+        sudo_write(PERSIST_STATE, json.dumps({"uid": UID, "labels": labels}, indent=2))
+        if is_installed:
+            return ""
+        sudo_write(PERSIST_PLIST, plist)
+        subprocess.run(["sudo", "chown", "root:wheel", str(PERSIST_PLIST)], capture_output=True, check=True)
+        return (f"boot daemon installed: macOS drops these disables at every boot while SIP "
+                f"is on, so it re-applies them ({PERSIST_PLIST}; `--enable-all` removes it)")
+    if not is_installed and not PERSIST_DIR.exists():
+        return ""
     subprocess.run(["sudo", "launchctl", "bootout", f"system/{PERSIST_LABEL}"],
                    capture_output=True, check=False)
     subprocess.run(["sudo", "rm", "-f", str(PERSIST_PLIST)], check=True)
     subprocess.run(["sudo", "rm", "-rf", str(PERSIST_DIR)], check=True)
-    print("persist off: boot daemon and its files removed. Services you disabled "
-          "stay disabled until the next boot.")
-    return 0
+    return "boot daemon removed: " + ("nothing is disabled" if not labels
+                                      else "SIP is off, so disables persist on their own")
 
 
 def kill_label(label: str, pids: list[int]) -> None:
@@ -1880,11 +1867,9 @@ Usage:
   debloat --disable-all   disable every label, no exceptions (prompts sudo)
   debloat --enable-all    re-enable everything — the panic button
   debloat --restore       revert to the state before your last apply
-  debloat --persist       re-disable what you disabled at every boot (sudo once)
   debloat --disable-sip   turn SIP off (csrutil asks your password; then restart)
                           unlocks the labels marked [sip-off] in --list
   debloat --enable-sip    turn SIP back on (restart)
-  debloat --no-persist    remove the boot daemon and its files
   debloat --dry-run       with --preset/--disable-all/--enable-all: preview only
   debloat --json          with --status: machine-readable output
   debloat -v|--version    print version
@@ -1985,10 +1970,6 @@ def main() -> int:
         return 0
     if "--restore" in argv:
         return cmd_restore(sections)
-    if "--persist" in argv:
-        return cmd_persist(sections)
-    if "--no-persist" in argv:
-        return cmd_no_persist()
     if "--enable-all" in argv or "--disable-all" in argv:
         refresh_state(sections)
         want_enabled = "--enable-all" in argv

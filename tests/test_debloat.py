@@ -349,6 +349,8 @@ class CommandLineTest(FakeMachineTest):
         self.debloat.PRESETS_DIR.mkdir(parents=True)
         self.debloat.mem_free_mb = lambda: 4096
         self.debloat.is_sip_enabled = lambda: True
+        # Installing the boot daemon writes to /Library as root; the e2e VM tests cover it.
+        self.debloat.sync_boot_daemon = lambda sections: ""
 
     def run_cli(self, *argv) -> tuple[int, str]:
         original = sys.argv

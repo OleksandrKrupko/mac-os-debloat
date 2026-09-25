@@ -413,7 +413,10 @@ def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, c
             report["snapshots"].append(snap)
             report["checks"].append(judge(snap, baseline, expect_disabled=False))
         elif scenario == "persist":
-            report["persist_output"] = vm.sh(f"python3 {GUEST_DEBLOAT} --persist 2>&1").stdout
+            installed = vm.sh("test -f /Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist",
+                              check=False).returncode == 0
+            report["checks"].append({"step": "apply installed the boot daemon", "sip_now": "installed" if installed
+                                     else "not installed", "ok": installed})
             for n in range(1, cycles + 1):
                 log(f"persist: reboot {n}/{cycles}")
                 vm.reboot()
@@ -436,10 +439,10 @@ def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, c
                 report["boot_logs"].append({"step": done["step"], "lines": boot_log(vm)})
                 report["checks"].append(judge(done, baseline, expect_disabled=True))
                 vm.sh("sudo rm -f '/Library/Application Support/mac-os-debloat/last-run.json'")
-            report["no_persist_output"] = vm.sh(f"python3 {GUEST_DEBLOAT} --no-persist 2>&1").stdout
+            report["enable_all_output"] = vm.sh(f"python3 {GUEST_DEBLOAT} --enable-all 2>&1").stdout
             leftovers = vm.sh("ls -d /Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist "
                               "'/Library/Application Support/mac-os-debloat' 2>/dev/null", check=False).stdout
-            report["checks"].append({"step": "after --no-persist", "judged": 0, "unregistered": [],
+            report["checks"].append({"step": "--enable-all removed the boot daemon", "judged": 0, "unregistered": [],
                                      "override_in_effect": 0, "not_in_effect": [],
                                      "disabled_but_running": [], "leftovers": leftovers.split(),
                                      "ok": not leftovers.strip()})
@@ -463,6 +466,10 @@ def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, c
                 if v["registered"]:
                     baseline["probe"]["labels"][label] = v
             vm.sh(f"python3 {GUEST_DEBLOAT} --disable-all 2>&1", check=False)
+            leftover = vm.sh("ls /Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist 2>/dev/null",
+                             check=False).stdout.strip()
+            report["checks"].append({"step": "SIP-off apply removed the boot daemon",
+                                     "sip_now": leftover or "removed", "ok": not leftover})
             for n in range(1, cycles + 1):
                 vm.reboot()
                 time.sleep(settle)
