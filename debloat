@@ -1681,7 +1681,6 @@ def sync_boot_daemon(sections: list[Section]) -> str:
   <array>
     <string>/usr/bin/python3</string>
     <string>{PERSIST_DIR}/debloat</string>
-    <string>--persist-run</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>{PERSIST_DIR}/daemon.log</string>
@@ -1931,7 +1930,7 @@ def main() -> int:
     if "-v" in argv or "--version" in argv:
         print(f"mac-os-debloat {VERSION}")
         return 0
-    if "--persist-run" in argv:
+    if Path(__file__).resolve() == PERSIST_DIR / "debloat":
         return cmd_persist_run()
 
     major = macos_major()
