@@ -700,12 +700,16 @@ PKG_COUNT = re.compile(r"(disable )\d+( non-essential)")
 README_COUNT_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     (r"Interactive console util to disable (\d+) non-essential", ("total",)),
     (r"Spotlight row and (\d+) launchd services grouped", ("total",)),
+    (r"With SIP on, (\d+) labels can be kept off\. Turn SIP off from the menu and all (\d+) can\.",
+     ("sip_on", "total")),
+    (r"\| Labels you can disable \| (\d+) \| all (\d+) \|", ("sip_on", "total")),
+    (r"the other (\d+) labels — marked", ("sip_off",)),
+    (r"Those (\d+) are the `\[sip-off\]` labels", ("sip_off",)),
     (r"beta enrollment \((\d+)\)", ("telemetry",)),
     (r"iMessage, Family \((\d+)\)", ("balanced",)),
-    (r"disabling 137/(\d+) com\.apple", ("total",)),
-    (r"`--preset telemetry` \| (\d+) \|", ("telemetry",)),
-    (r"`--preset balanced` \| (\d+) \|", ("balanced",)),
-    (r"`--disable-all` \| (\d+) \|", ("total",)),
+    (r"`--preset telemetry` \| (\d+) \| (\d+) \|", ("telemetry", "telemetry_sip_on")),
+    (r"`--preset balanced` \| (\d+) \| (\d+) \|", ("balanced", "balanced_sip_on")),
+    (r"`--disable-all` \| (\d+) \| (\d+) \|", ("total", "sip_on")),
     (r"bridgeOS — (\d+) labels", ("preset_untouched",)),
     (r"(\d+) labels sit between", ("beyond_balanced",)),
     (r"(\d+) labels across (\d+) sections", ("total", "sections")),
@@ -723,6 +727,7 @@ README_COUNT_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     (r"Reminders \+ AddressBook \((\d+)\)", ("mail",)),
     (r"AirPlay / Continuity Capture \((\d+)\)", ("continuity",)),
     (r"✓ (\d+) labels \+ Spotlight", ("total",)),
+    (r"works with SIP on \((\d+) labels\)", ("sip_on",)),
 ]
 
 
@@ -749,6 +754,12 @@ def doc_counts(sections: list[Section] | None = None) -> dict[str, int]:
     }
     for key, titles in DOC_COUNT_SECTIONS.items():
         out[key] = add(*titles)
+    works_with_sip = [(sec.preset, it) for sec in sections for it in sec.items
+                      if not it.is_sip_off_required]
+    out["sip_off"] = stats.total - len(works_with_sip)
+    out["sip_on"] = len(works_with_sip)
+    out["telemetry_sip_on"] = sum(p == "telemetry" for p, _ in works_with_sip)
+    out["balanced_sip_on"] = sum(p in ("telemetry", "balanced") for p, _ in works_with_sip)
     return out
 
 
@@ -1867,14 +1878,15 @@ def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
     return run_apply(sections, dry_run)
 
 
-VERSION = "0.12.3"
+VERSION = "0.13.0"
 
 
 def help_text() -> str:
     stats = catalog_stats()
     return f"""mac-os-debloat {VERSION} — toggle non-essential macOS launchd services and the Spotlight index.
 
-Runs a live SIP-safe launchctl TUI by default (no SIP disable required).
+Runs the interactive TUI by default. Works with SIP on; with SIP off, the
+[sip-off] labels in --list can be disabled too (--disable-sip).
 
 Catalog: {stats.total} labels in {stats.sections} sections.
 

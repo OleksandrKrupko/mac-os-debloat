@@ -652,12 +652,15 @@ class CatalogStatsTest(unittest.TestCase):
             "\n".join([
                 "Interactive console util to disable 1 non-essential",
                 "Spotlight row and 1 launchd services grouped",
+                "With SIP on, 1 labels can be kept off. Turn SIP off from the menu and all 1 can.",
+                "| Labels you can disable | 1 | all 1 |",
+                "the other 1 labels — marked",
+                "Those 1 are the `[sip-off]` labels",
                 "beta enrollment (1)",
                 "iMessage, Family (1)",
-                "disabling 137/1 com.apple",
-                "| `--preset telemetry` | 1 | nothing",
-                "| `--preset balanced` | 1 | Siri",
-                "| `--disable-all` | 1 | balanced",
+                "| `--preset telemetry` | 1 | 1 | nothing",
+                "| `--preset balanced` | 1 | 1 | Siri",
+                "| `--disable-all` | 1 | 1 | balanced",
                 "bridgeOS — 1 labels",
                 "1 labels sit between",
                 "1 labels across 1 sections",
@@ -675,6 +678,7 @@ class CatalogStatsTest(unittest.TestCase):
                 "Reminders + AddressBook (1)",
                 "AirPlay / Continuity Capture (1)",
                 "✓ 1 labels + Spotlight",
+                "works with SIP on (1 labels)",
                 "",
             ]))
         (tmp / "package.json").write_text(
