@@ -33,7 +33,7 @@ IMAGES = {
     "26.5": "ghcr.io/cirruslabs/macos-tahoe-vanilla:26.5",
     "27.0": "ghcr.io/cirruslabs/macos-golden-gate-vanilla:27.0",
 }
-SCENARIOS = ("apply", "restore", "reboot", "poweroff")
+SCENARIOS = ("apply", "restore", "reboot", "poweroff", "persist", "sip-flow")
 GUEST_USER = "admin"
 GUEST_PASSWORD = "admin"
 GUEST_DEBLOAT = "/Users/admin/debloat"
@@ -183,8 +183,61 @@ class VM:
             self.proc.wait()
 
 
-def base_name(os_version: str) -> str:
-    return f"debloat-e2e-base-{os_version}"
+def base_name(os_version: str, sip: str = "on") -> str:
+    return f"debloat-e2e-base-{os_version}" + ("" if sip == "on" else "-sip-off")
+
+
+CSRUTIL_DISABLE = """set timeout 60
+spawn sudo csrutil disable
+expect "y/n]:" { send "y\\r" }
+expect "user:" { send "%s\\r" }
+expect "assword" { send "%s\\r" }
+expect eof
+""" % (GUEST_USER, GUEST_PASSWORD)
+
+
+def answer_csrutil(vm: VM, command: str) -> str:
+    """Run a command that ends in `csrutil`, answering its y/n, user and
+    password prompts the way a person at the terminal would."""
+    vm.sh("cat > /tmp/answer.exp", stdin=(
+        "set timeout 120\n"
+        f"spawn {command}\n"
+        "expect {\n"
+        '  "y/n]:" { send "y\\r"; exp_continue }\n'
+        f'  "user:" {{ send "{GUEST_USER}\\r"; exp_continue }}\n'
+        f'  "assword" {{ send "{GUEST_PASSWORD}\\r"; exp_continue }}\n'
+        "  eof\n"
+        "}\n"))
+    return vm.sh("/usr/bin/expect /tmp/answer.exp", timeout=180).stdout
+
+
+def prepare_sip_off(os_version: str, workdir: Path) -> int:
+    """Clone the SIP-on base and turn SIP off from inside macOS, the way a user would."""
+    base = base_name(os_version, "off")
+    if base in local_vms():
+        log(f"{base} already exists; `tart delete {base}` to rebuild it")
+        return 0
+    if base_name(os_version) not in local_vms():
+        raise SystemExit(f"prepare the SIP-on base first: python3 tests/e2e.py prepare --os {os_version}")
+    tart("clone", base_name(os_version), base)
+    vm = VM(base, workdir)
+    try:
+        vm.start()
+        vm.sh("cat > /tmp/csrutil-disable.exp", stdin=CSRUTIL_DISABLE)
+        log(vm.sh("/usr/bin/expect /tmp/csrutil-disable.exp", timeout=120).stdout.strip().splitlines()[-2])
+        vm.reboot()
+        status = vm.sh("csrutil status").stdout.strip()
+        if "disabled" not in status:
+            raise RuntimeError(f"SIP still on after csrutil disable + reboot: {status}")
+        log(f"guest: {status}")
+        vm.sh("sudo shutdown -h now", check=False, timeout=20)
+        vm.proc.wait(timeout=300)
+    except BaseException:
+        vm.stop()
+        tart("delete", base, check=False)
+        raise
+    log(f"base image ready: {base}")
+    return 0
 
 
 def local_vms() -> set[str]:
@@ -285,12 +338,16 @@ def label_table(report: dict) -> str:
     snaps = report["snapshots"]
     rows = ["label\tdomains\t" + "\t".join(s["step"] for s in snaps)]
     for label in report.get("targets", []):
-        domains = snaps[0]["probe"]["labels"][label]["registered"]
+        seen = [s["probe"]["labels"][label]["registered"] for s in snaps if label in s["probe"]["labels"]]
+        domains = next((d for d in seen if d), [])
         if not domains:
             rows.append(f"{label}\t-\t" + "\t".join("not loaded" for _ in snaps))
             continue
         cells = []
         for s in snaps:
+            if label not in s["probe"]["labels"]:
+                cells.append("-")
+                continue
             v = s["probe"]["labels"][label]
             state = "off" if set(domains) <= set(v["disabled_in"]) else "on"
             cells.append(state + ("+running" if v["pid"] > 0 else "") + ("" if v["registered"] else " (unloaded)"))
@@ -298,22 +355,35 @@ def label_table(report: dict) -> str:
     return "\n".join(rows) + "\n"
 
 
-def run_scenario(scenario: str, os_version: str, preset: str, cycles: int, settle: int,
-                 out: Path, workdir: Path, keep: bool) -> bool:
-    base = base_name(os_version)
+def watch_after_boot(vm: VM, labels: list[str], baseline: dict, report: dict, prefix: str,
+                     watch: list[int]) -> None:
+    """Snapshot and judge at each offset (seconds) after the boot that just finished."""
+    booted = time.time()
+    for offset in watch:
+        time.sleep(max(0.0, booted + offset - time.time()))
+        snap = snapshot(vm, labels, f"{prefix}, {offset}s after boot")
+        report["snapshots"].append(snap)
+        report["checks"].append(judge(snap, baseline, expect_disabled=True))
+    report["boot_logs"].append({"step": prefix, "lines": boot_log(vm)})
+
+
+def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, cycles: int,
+                 settle: int, watch: list[int], out: Path, workdir: Path, keep: bool) -> bool:
+    base = base_name(os_version, sip_wanted)
     if base not in local_vms():
-        raise SystemExit(f"no base image {base}; run `python3 tests/e2e.py prepare --os {os_version}`")
-    name = f"debloat-e2e-{os_version}-{scenario}-{int(time.time())}"
+        raise SystemExit(f"no base image {base}; run `python3 tests/e2e.py prepare --os {os_version}"
+                         f" --sip {sip_wanted}`")
+    name = f"debloat-e2e-{os_version}-sip-{sip_wanted}-{scenario}-{int(time.time())}"
     tart("clone", base, name)
     vm = VM(name, workdir)
-    report: dict = {"scenario": scenario, "os": os_version, "preset": preset, "vm": name,
+    report: dict = {"scenario": scenario, "os": os_version, "sip": sip_wanted, "preset": preset, "vm": name,
                     "snapshots": [], "checks": [], "boot_logs": []}
     try:
         log(f"{scenario}: booting {name}")
         vm.start()
         sip = vm.sh("csrutil status").stdout.strip()
-        if "enabled" not in sip:
-            raise RuntimeError(f"SIP is not on in the guest ({sip}); results would prove nothing")
+        if ("enabled" if sip_wanted == "on" else "disabled") not in sip:
+            raise RuntimeError(f"guest SIP does not match --sip {sip_wanted} ({sip}); results would prove nothing")
         vm.sh(f"cat > {GUEST_DEBLOAT} && chmod +x {GUEST_DEBLOAT}",
               stdin=(REPO / "debloat").read_text())
         vm.sh(f"cat > {GUEST_PROBE}", stdin=PROBE)
@@ -354,27 +424,94 @@ def run_scenario(scenario: str, os_version: str, preset: str, cycles: int, settl
             snap = snapshot(vm, labels, "after --restore")
             report["snapshots"].append(snap)
             report["checks"].append(judge(snap, baseline, expect_disabled=False))
+        elif scenario == "persist":
+            installed = vm.sh("test -f /Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist",
+                              check=False).returncode == 0
+            report["checks"].append({"step": "apply installed the boot daemon", "sip_now": "installed" if installed
+                                     else "not installed", "ok": installed})
+            for n in range(1, cycles + 1):
+                log(f"persist: reboot {n}/{cycles}")
+                vm.reboot()
+                watch_after_boot(vm, labels, baseline, report, f"reboot {n}", watch)
+                deadline = time.time() + 900
+                while time.time() < deadline:
+                    last = vm.sh("cat '/Library/Application Support/mac-os-debloat/last-run.json'",
+                                 check=False)
+                    if last.returncode == 0 and '"respawners"' in last.stdout:
+                        break
+                    time.sleep(15)
+                else:
+                    raise RuntimeError("boot daemon wrote no report in 15 minutes")
+                report.setdefault("daemon_runs", []).append(json.loads(last.stdout))
+                vm.sh("sudo rm -f '/Library/Application Support/mac-os-debloat/last-run.json'")
+            report["enable_all_output"] = vm.sh(f"python3 {GUEST_DEBLOAT} --enable-all 2>&1").stdout
+            leftovers = vm.sh("ls -d /Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist "
+                              "'/Library/Application Support/mac-os-debloat' 2>/dev/null", check=False).stdout
+            report["checks"].append({"step": "--enable-all removed the boot daemon", "judged": 0, "unregistered": [],
+                                     "override_in_effect": 0, "not_in_effect": [],
+                                     "disabled_but_running": [], "leftovers": leftovers.split(),
+                                     "ok": not leftovers.strip()})
+        elif scenario == "sip-flow":
+            report["disable_sip_output"] = answer_csrutil(vm, f"python3 {GUEST_DEBLOAT} --disable-sip")
+            vm.reboot()
+            time.sleep(settle)
+            sip_now = vm.sh("csrutil status").stdout.strip()
+            report["checks"].append({"step": "debloat --disable-sip + reboot", "sip_now": sip_now,
+                                     "ok": "disabled" in sip_now})
+            dry = vm.sh(f"python3 {GUEST_DEBLOAT} --dry-run --disable-all").stdout
+            labels = sorted(set(labels) | {line.split()[1] for line in dry.splitlines()
+                                           if line.startswith("  disable  ")})
+            report["targets"] = labels
+            sip_off_start = snapshot(vm, labels, "SIP off, before --disable-all")
+            report["snapshots"].append(sip_off_start)
+            # SIP-free labels were disabled before SIP went off, so with SIP off they
+            # never registered; their domains come from the stock snapshot.
+            baseline = json.loads(json.dumps(sip_off_start))
+            for label, v in report["snapshots"][0]["probe"]["labels"].items():
+                if v["registered"]:
+                    baseline["probe"]["labels"][label] = v
+            vm.sh(f"python3 {GUEST_DEBLOAT} --disable-all 2>&1", check=False)
+            leftover = vm.sh("ls /Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist 2>/dev/null",
+                             check=False).stdout.strip()
+            report["checks"].append({"step": "SIP-off apply removed the boot daemon",
+                                     "sip_now": leftover or "removed", "ok": not leftover})
+            for n in range(1, cycles + 1):
+                vm.reboot()
+                watch_after_boot(vm, labels, baseline, report, f"SIP off, --disable-all, reboot {n}", watch)
+            vm.sh(f"python3 {GUEST_DEBLOAT} --enable-all 2>&1", check=False)
+            report["enable_sip_output"] = answer_csrutil(vm, f"python3 {GUEST_DEBLOAT} --enable-sip")
+            vm.reboot()
+            time.sleep(settle)
+            sip_now = vm.sh("csrutil status").stdout.strip()
+            back = snapshot(vm, labels, "--enable-all + --enable-sip + reboot")
+            report["snapshots"].append(back)
+            report["checks"].append({"step": "debloat --enable-sip + reboot", "sip_now": sip_now,
+                                     "ok": "enabled" in sip_now})
+            report["checks"].append(judge(back, baseline, expect_disabled=False))
         elif scenario in ("reboot", "poweroff"):
             for n in range(1, cycles + 1):
                 step = f"after {'reboot' if scenario == 'reboot' else 'power-off + cold boot'} {n}"
                 log(f"{scenario}: cycle {n}/{cycles}")
                 vm.reboot() if scenario == "reboot" else vm.poweroff_and_boot()
-                time.sleep(settle)
-                snap = snapshot(vm, labels, step)
-                report["snapshots"].append(snap)
-                report["boot_logs"].append({"step": step, "lines": boot_log(vm)})
-                report["checks"].append(judge(snap, baseline, expect_disabled=True))
+                watch_after_boot(vm, labels, baseline, report, step, watch)
     finally:
         vm.stop()
         if not keep:
             tart("delete", name, check=False)
         out.mkdir(parents=True, exist_ok=True)
-        (out / f"{os_version}-{scenario}.json").write_text(json.dumps(report, indent=2, default=list))
-        (out / f"{os_version}-{scenario}-labels.tsv").write_text(label_table(report))
+        (out / f"{os_version}-sip-{sip_wanted}-{scenario}.json").write_text(json.dumps(report, indent=2, default=list))
+        (out / f"{os_version}-sip-{sip_wanted}-{scenario}-labels.tsv").write_text(label_table(report))
 
     for c in report["checks"]:
         bad = c.get("not_in_effect", c.get("still_disabled", []))
         verdict = lambda ok: "PASS" if ok else "FAIL"
+        if "sip_now" in c:
+            print(f"  {c['step']}\n    {verdict(c['ok'])}  {c['sip_now']}")
+            continue
+        if "leftovers" in c:
+            print(f"  {c['step']}\n    {verdict(c['ok'])}  files removed       "
+                  f"{'all' if c['ok'] else ', '.join(c['leftovers'])}")
+            continue
         print(f"  {c['step']}  ({c['judged']} judged, {len(c['unregistered'])} not loaded on this VM)")
         if "not_in_effect" in c:
             print(f"    {verdict(not bad)}  override in effect  {c['override_in_effect']}/{c['judged']}")
@@ -389,7 +526,7 @@ def run_scenario(scenario: str, os_version: str, preset: str, cycles: int, settl
             for label in found[:20]:
                 print(f"          {kind}: {label}")
             if len(found) > 20:
-                print(f"          ... {len(found) - 20} more {kind} (see {os_version}-{scenario}-labels.tsv)")
+                print(f"          ... {len(found) - 20} more {kind} (see {os_version}-sip-{sip_wanted}-{scenario}-labels.tsv)")
     return all(c["ok"] for c in report["checks"])
 
 
@@ -398,25 +535,30 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("prepare", help="build the base image for one macOS version")
     p.add_argument("--os", choices=sorted(IMAGES), required=True)
+    p.add_argument("--sip", choices=("on", "off"), default="on",
+                   help="off: clone the SIP-on base and run `csrutil disable` inside it")
     r = sub.add_parser("run", help="run one scenario, or all of them, on fresh clones")
     r.add_argument("scenario", choices=(*SCENARIOS, "all"))
     r.add_argument("--os", choices=sorted(IMAGES), required=True)
+    r.add_argument("--sip", choices=("on", "off"), default="on")
     r.add_argument("--preset", default="telemetry",
                    help="telemetry, balanced, a custom preset name, or disable-all for every label")
     r.add_argument("--cycles", type=int, default=2, help="reboots / cold boots per scenario")
     r.add_argument("--settle", type=int, default=60, help="seconds to wait after an apply or a boot before judging again")
+    r.add_argument("--watch", default="60",
+                   help="comma-separated seconds after each boot to judge at, e.g. 60,300,600")
     r.add_argument("--out", type=Path, help="evidence dir (default: a new temp dir)")
     r.add_argument("--keep", action="store_true", help="keep the VM clone for inspection")
     args = ap.parse_args()
 
     workdir = Path(tempfile.mkdtemp(prefix="debloat-e2e-"))
     if args.cmd == "prepare":
-        return cmd_prepare(args.os, workdir)
+        return cmd_prepare(args.os, workdir) if args.sip == "on" else prepare_sip_off(args.os, workdir)
     out = args.out or workdir
     ok = True
     for scenario in SCENARIOS if args.scenario == "all" else (args.scenario,):
-        ok = run_scenario(scenario, args.os, args.preset, args.cycles, args.settle, out, workdir,
-                               args.keep) and ok
+        ok = run_scenario(scenario, args.os, args.sip, args.preset, args.cycles, args.settle,
+                          [int(x) for x in args.watch.split(",")], out, workdir, args.keep) and ok
     log(f"evidence: {out}")
     return 0 if ok else 1
 
