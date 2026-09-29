@@ -28,8 +28,11 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import textwrap
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -1689,6 +1692,26 @@ def sudo_write(path: Path, text: str) -> None:
                    stdout=subprocess.DEVNULL, check=True)
 
 
+def script_for_daemon() -> tuple[Path | None, str]:
+    """This script's code as a file, for the daemon to run. `curl ... | python3`
+    leaves no file on disk, so fetch this same release instead. Returns
+    (path, "") or (None, why not)."""
+    here = Path(__file__)
+    if here.is_file():
+        return here, ""
+    url = f"https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/v{VERSION}/debloat"
+    try:
+        text = urllib.request.urlopen(url, timeout=20).read().decode()
+    except (urllib.error.URLError, OSError) as e:
+        return None, f"could not download {url} ({e})"
+    if f'VERSION = "{VERSION}"' not in text:
+        return None, f"{url} is not version {VERSION}"
+    fd, name = tempfile.mkstemp(suffix="-debloat")
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    return Path(name), ""
+
+
 def sync_boot_daemon(sections: list[Section]) -> str:
     """With SIP on, launchd drops these overrides at every boot, so while
     anything is disabled a root daemon re-applies them; with nothing disabled,
@@ -1714,11 +1737,17 @@ def sync_boot_daemon(sections: list[Section]) -> str:
 </dict>
 </plist>
 """
+        source, why_not = script_for_daemon()
+        if source is None:
+            return (f"boot daemon NOT installed: {why_not}. These disables last until the next "
+                    f"reboot; run debloat from a file (npx, brew, or curl -o) to keep them")
         subprocess.run(["sudo", "mkdir", "-p", str(PERSIST_DIR)], capture_output=True, check=True)
         # Root runs this copy at every boot, so it must not stay writable by the user.
         subprocess.run(["sudo", "install", "-m", "644", "-o", "root", "-g", "wheel",
-                        str(Path(__file__).resolve()), str(PERSIST_DIR / "debloat")],
+                        str(source.resolve()), str(PERSIST_DIR / "debloat")],
                        capture_output=True, check=True)
+        if source != Path(__file__):
+            source.unlink()
         sudo_write(PERSIST_STATE, json.dumps({"uid": UID, "labels": labels}, indent=2))
         if is_installed:
             return ""
