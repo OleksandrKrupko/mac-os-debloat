@@ -1199,8 +1199,8 @@ def menu_section(sections: list[Section]) -> Section:
     if locked:
         items.append(Item(
             label="disable SIP", section=MENU_SECTION, action="sip-off",
-            comment=f"unlock the {locked} greyed-out labels — {SIP_COST}; asks your password, "
-                    f"then a restart"))
+            comment=f"unlock the {locked} greyed-out labels — iPhone/iPad apps stop running; "
+                    f"password, then a restart"))
     elif needs_sip:
         items.append(Item(
             label="enable SIP", section=MENU_SECTION, action="sip-on",
@@ -1272,6 +1272,13 @@ SPINNER_MS = 140
 SPOTLIGHT_POLL_S = 3
 
 
+def fit(text: str, width: int) -> str:
+    """Cut at a word boundary and end with `…`, rather than mid-word at the edge."""
+    if len(text) <= width:
+        return text
+    return text[:width - 1].rsplit(" ", 1)[0].rstrip(" —·,;") + "…"
+
+
 def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list[int],
          tick: int = 0) -> None:
     stdscr.erase()
@@ -1334,7 +1341,7 @@ def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list
                 text = f"{changed}{mark}  {it.label:<48}  {note}{it.comment}"
             is_cursor = item_by_id.get(id(it)) == cursor
             attr = curses.A_REVERSE if is_cursor else curses.A_DIM if it.is_locked else curses.A_NORMAL
-            stdscr.addnstr(y, 0, text[:w - 1], w - 1, attr)
+            stdscr.addnstr(y, 0, fit(text, w - 1), w - 1, attr)
         # blank: leave row empty
 
     if so > 0:
@@ -1350,10 +1357,15 @@ def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list
 
     current = flat[cursor]
     about = current.comment
+    if current.action == "sip-off":
+        about = (current.comment.split(" — ")[0]
+                 + f". Cost: {SIP_COST}. Asks your password, then a restart.")
     if current.is_locked:
         about = ("with SIP on, macOS restarts this within seconds of a disable — "
                  "'disable SIP' at the top unlocks it. " + about)
-    explanation = textwrap.wrap(f"{current.label}: {about}", w - 1)[:2]
+    explanation = textwrap.wrap(f"{current.label}: {about}", w - 1)
+    if len(explanation) > 2:
+        explanation = [explanation[0], fit(explanation[1] + " " + explanation[2], w - 1)]
     try:
         for n, line in enumerate(explanation):
             stdscr.addnstr(h - 3 + n, 0, line, w - 1, curses.A_DIM)
