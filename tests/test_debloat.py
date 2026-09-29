@@ -348,6 +348,9 @@ class CommandLineTest(FakeMachineTest):
         self.debloat.USER_LABELS_FILE = self.debloat.BACKUP_DIR / "labels.txt"
         self.debloat.PRESETS_DIR.mkdir(parents=True)
         self.debloat.mem_free_mb = lambda: 4096
+        self.debloat.is_sip_enabled = lambda: True
+        # Installing the boot daemon writes to /Library as root; the e2e VM tests cover it.
+        self.debloat.sync_boot_daemon = lambda sections: ""
 
     def run_cli(self, *argv) -> tuple[int, str]:
         original = sys.argv
@@ -388,6 +391,25 @@ class CommandLineTest(FakeMachineTest):
         self.assertEqual(self.machine.commands(),
                          ["disable system/com.example.telemetry",
                           "bootout system/com.example.telemetry"])
+
+    def test_sip_on_never_switches_off_a_sip_off_label_but_can_switch_it_back_on(self):
+        """With SIP on launchd restarts a [sip-off] label within seconds, so a
+        preset or --disable-all must leave it running — and --enable-all must
+        still be able to undo one that was disabled while SIP was off."""
+        self.debloat.EMBEDDED_LABELS = (
+            "# === Telemetry [telemetry] ===\n"
+            "com.example.telemetry             # analytics\n"
+            "com.example.respawner [sip-off]   # restarted on demand\n"
+        )
+        self.machine.add("com.example.telemetry", daemon_plist=True, registered=["system"])
+        self.machine.add("com.example.respawner", daemon_plist=True, registered=["system"])
+        for argv in (("--preset", "telemetry"), ("--disable-all",)):
+            self.run_cli(*argv)
+            self.assertNotIn("disable system/com.example.respawner", self.machine.commands())
+        self.machine.state["domains"]["system"]["disabled"].append("com.example.respawner")
+        self.machine.flush()
+        self.run_cli("--enable-all")
+        self.assertIn("enable system/com.example.respawner", self.machine.commands())
 
     def test_restore_puts_back_exactly_the_pre_apply_state(self):
         self.two_labels()
@@ -630,12 +652,15 @@ class CatalogStatsTest(unittest.TestCase):
             "\n".join([
                 "Interactive console util to disable 1 non-essential",
                 "Spotlight row and 1 launchd services grouped",
+                "With SIP on, 1 labels can be kept off. Turn SIP off from the menu and all 1 can.",
+                "| Labels you can disable | 1 | all 1 |",
+                "the other 1 labels — marked",
+                "Those 1 are the `[sip-off]` labels",
                 "beta enrollment (1)",
                 "iMessage, Family (1)",
-                "disabling 137/1 com.apple",
-                "| `--preset telemetry` | 1 | nothing",
-                "| `--preset balanced` | 1 | Siri",
-                "| `--disable-all` | 1 | balanced",
+                "| `--preset telemetry` | 1 | 1 | nothing",
+                "| `--preset balanced` | 1 | 1 | Siri",
+                "| `--disable-all` | 1 | 1 | balanced",
                 "bridgeOS — 1 labels",
                 "1 labels sit between",
                 "1 labels across 1 sections",
@@ -653,6 +678,7 @@ class CatalogStatsTest(unittest.TestCase):
                 "Reminders + AddressBook (1)",
                 "AirPlay / Continuity Capture (1)",
                 "✓ 1 labels + Spotlight",
+                "works with SIP on (1 labels)",
                 "",
             ]))
         (tmp / "package.json").write_text(
@@ -666,6 +692,14 @@ class CatalogStatsTest(unittest.TestCase):
         self.assertIn(f"disable {total} non-essential",
                       (tmp / "package.json").read_text())
         self.assertEqual(self.debloat.sync_docs(tmp, check=True), [])
+
+    def test_charge_limiting_daemons_are_in_no_preset(self):
+        """Disabling these was reported to break charge limiting, so a preset
+        that promises to cost nothing must not take them."""
+        for sec in self.debloat.parse_labels(self.debloat.EMBEDDED_LABELS):
+            for it in sec.items:
+                if it.label in ("com.apple.perfpowermetricd", "com.apple.powerlogHelperd"):
+                    self.assertEqual(sec.preset, "", it.label)
 
     def test_campo_is_app_launcher_not_an_ai_preset(self):
         """campo hosts Cmd-Space on 27. Keep it listed so you can still turn
