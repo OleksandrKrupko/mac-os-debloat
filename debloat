@@ -1922,7 +1922,7 @@ def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
     return run_apply(sections, dry_run)
 
 
-VERSION = "0.13.0"
+VERSION = "0.13.1"
 
 
 def help_text() -> str:

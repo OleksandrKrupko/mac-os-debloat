@@ -2,7 +2,7 @@
 
 **Turn off the Apple background services you don't use — from the terminal, in one keystroke, fully reversible.**
 
-Interactive console util to disable 296 non-essential macOS launchd services — Siri, Apple Intelligence, telemetry, ads, and the Apple apps you don't use — plus the Spotlight file index. macOS Tahoe 26 and Golden Gate 27, Apple Silicon. No install, no dependencies.
+Interactive console util to disable 296 non-essential macOS launchd services — Siri, Apple Intelligence, telemetry, ads, and the Apple apps you don't use — plus the Spotlight file index. macOS Tahoe 26 and Golden Gate 27, Apple Silicon. Needs nothing but `python3`.
 
 - **~1.5-2 GB of RAM back** on a 16 GB M4 ([how that was measured](#why)).
 - **Keeps them off across reboots.** With SIP on, macOS re-enables disabled services at every boot; a small boot daemon, installed on your first apply, disables them again. With SIP off they stay off on their own.
@@ -10,21 +10,21 @@ Interactive console util to disable 296 non-essential macOS launchd services —
 - **The desktop is never touched.** WindowServer, Finder, Dock, audio, networking and security aren't in the catalog at any setting.
 - **One key undoes everything.** `enable all` / `--enable-all`, or `--restore` to go back to exactly how it was before your last apply.
 
+Run it with any one of these:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/debloat | python3
+```
+
 ```bash
 npx -y @oleksandr_krupko/mac-os-debloat
 ```
 
-<details>
-<summary>curl · Homebrew</summary>
-
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/debloat | python3
 brew install OleksandrKrupko/debloat/debloat && debloat
 ```
 
-All methods need `python3`, which ships with the Xcode Command Line Tools (`xcode-select --install`).
-
-</details>
+`python3` ships with the Xcode Command Line Tools (`xcode-select --install` if it's missing).
 
 ![mac-os-debloat TUI — preset menu on top, then the Spotlight row and 296 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
 
@@ -36,7 +36,7 @@ System Integrity Protection decides how much macOS lets you keep off.
 |---|---|---|
 | Labels you can disable | 172 | all 296 |
 | After a reboot | the boot daemon disables them again | they stay off on their own |
-| Measured on macOS 26.5 (VM) | 149 of 273 loaded labels stayed off · 55% | 273 of 273 stayed off · 100% |
+| Measured on macOS 26.5 (VM), after reboots | all 149 SIP-on labels stayed off — 55% of the 273 loaded | all 273 stayed off — 100% |
 | Cost | none | iPhone/iPad apps stop running on the Mac; root processes can modify system files and load unsigned kernel extensions |
 
 With SIP on, the other 124 labels — marked `[sip-off]`, greyed out in the TUI — are restarted by macOS within seconds of a kill, so the tool leaves them alone.
@@ -77,6 +77,8 @@ A preset disables its own labels, leaves everything else as it is, and never re-
 | `--preset telemetry` | 45 | 25 | nothing — analytics, crash reports, Apple ads, Biome, beta enrollment |
 | `--preset balanced` | 181 | 100 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather |
 | `--disable-all` | 296 | 172 | balanced, plus Safari, Photos, Mail/Calendar/Contacts, Music/TV/Books, Maps, Time Machine, Screen Time, HomeKit, printing, iCloud sync — and **iCloud login, App Store purchases, macOS Update installs, and on macOS 27 Cmd-Space / the four-finger Apps pinch break** |
+
+Counts are for the full catalog; the TUI shows only the labels present on your macOS build, so its numbers are a little lower.
 
 Neither preset touches Apple ID auth, App Store commerce, FairPlay or bridgeOS — 28 labels only `--disable-all` or your own preset reach. 115 labels sit between `balanced` and `--disable-all`; pick those yourself:
 
