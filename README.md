@@ -111,7 +111,7 @@ Reported in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8) and
 <a name="spotlight"></a>
 <summary><b>Spotlight</b></summary>
 
-The Spotlight checkbox is the file *index* (`mds`, `mds_stores`, `mdworker`), not the overlay you type into. It serves Cmd-Space file search, Finder search and launchers like Alfred and Raycast. **Off** runs `mdutil -a -d`: indexing stops on every volume; `find`, `grep`, `ripgrep`, git and editor search keep working. **On** runs `mdutil -a -i on` plus `mdutil -a -E`, a 10-30 minute rebuild; the row shows a spinner until it settles.
+The Spotlight checkbox is the file *index* (`mds`, `mds_stores`, `mdworker`), not the overlay you type into. It serves Cmd-Space file search, Finder search and launchers like Alfred and Raycast. **Off** runs `mdutil -a -d`: indexing stops on every volume; `find`, `grep`, `ripgrep`, git and editor search keep working. **On** runs `mdutil -a -i on` plus `mdutil -a -E`, a 10-30 minute rebuild; the row shows a spinner until it settles. Off survives reboots on its own, with no daemon: the indexers (`mds_stores`, `mdworker_shared`) stay stopped, while `mds` and `corespotlightd` stay resident.
 
 On macOS 27, Cmd-Space and the four-finger Apps pinch are `com.apple.campo`, a separate row. It is not Siri and not in `balanced`; turning it off breaks app launching even with the index on. KeepAlive `mds` / `corespotlightd` are a separate section gated to macOS 27 — on Tahoe 26, disabling `corespotlightd` broke typed Cmd-Space.
 
@@ -190,7 +190,7 @@ python3 tests/e2e.py run persist --os 26.5 --preset disable-all --watch 60,300,6
 python3 tests/e2e.py run sip-flow --os 26.5 --preset disable-all
 ```
 
-Scenarios: `apply`, `restore`, `reboot`, `poweroff`, `persist` (boot daemon), `sip-flow` (SIP off and back on through debloat). Needs an Apple Silicon Mac; the VM has no battery or Bluetooth, so labels that only load on real hardware are reported as not loaded.
+Scenarios: `apply`, `restore`, `reboot`, `poweroff`, `persist` (boot daemon), `sip-flow` (SIP off and back on through debloat), `tui-sip` (the TUI's SIP rows, typed on a real terminal), `spotlight` (the TUI's Spotlight row through a reboot). Needs an Apple Silicon Mac; the VM has no battery or Bluetooth, so labels that only load on real hardware are reported as not loaded.
 
 </details>
 

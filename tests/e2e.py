@@ -21,10 +21,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -33,7 +35,7 @@ IMAGES = {
     "26.5": "ghcr.io/cirruslabs/macos-tahoe-vanilla:26.5",
     "27.0": "ghcr.io/cirruslabs/macos-golden-gate-vanilla:27.0",
 }
-SCENARIOS = ("apply", "restore", "reboot", "poweroff", "persist", "sip-flow")
+SCENARIOS = ("apply", "restore", "reboot", "poweroff", "persist", "sip-flow", "tui-sip", "spotlight")
 GUEST_USER = "admin"
 GUEST_PASSWORD = "admin"
 GUEST_DEBLOAT = "/Users/admin/debloat"
@@ -129,12 +131,40 @@ class VM:
             time.sleep(3)
         raise RuntimeError(f"ssh to {self.name} ({self.ip}) did not come up in {timeout:.0f}s")
 
-    def sh(self, cmd: str, check: bool = True, stdin: str | None = None,
-           timeout: float = 600) -> subprocess.CompletedProcess:
-        argv = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+    def ssh_argv(self, cmd: str, tty: bool = False) -> list[str]:
+        return ["ssh", *(["-tt"] if tty else []),
+                "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
                 "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=5", "-o", "PubkeyAuthentication=no",
                 "-o", "PreferredAuthentications=password,keyboard-interactive",
                 f"{GUEST_USER}@{self.ip}", cmd]
+
+    def tui(self, keys: list[tuple[float, str]], cols: int = 160, rows: int = 50) -> str:
+        """Run the real TUI on a pty in the guest and type `keys` — (seconds to
+        wait first, text to send). Returns everything the terminal received."""
+        proc = subprocess.Popen(
+            self.ssh_argv(f"stty cols {cols} rows {rows}; TERM=xterm-256color python3 {GUEST_DEBLOAT}",
+                          tty=True),
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=self.env)
+        chunks: list[bytes] = []
+        reader = threading.Thread(target=lambda: chunks.extend(iter(lambda: proc.stdout.read1(4096), b"")),
+                                  daemon=True)
+        reader.start()
+        for wait, text in keys:
+            time.sleep(wait)
+            proc.stdin.write(text.encode())
+            proc.stdin.flush()
+        try:
+            proc.wait(timeout=60)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            chunks.append(b"\n[e2e: the TUI did not exit within 60s after the last key]\n")
+        reader.join(timeout=10)
+        return b"".join(chunks).decode(errors="replace")
+
+    def sh(self, cmd: str, check: bool = True, stdin: str | None = None,
+           timeout: float = 600) -> subprocess.CompletedProcess:
+        argv = self.ssh_argv(cmd)
         try:
             r = subprocess.run(argv, input=stdin, capture_output=True, text=True,
                                env=self.env, stdin=None if stdin is not None else subprocess.DEVNULL,
@@ -451,6 +481,53 @@ def run_scenario(scenario: str, os_version: str, sip_wanted: str, preset: str, c
                                      "override_in_effect": 0, "not_in_effect": [],
                                      "disabled_but_running": [], "leftovers": leftovers.split(),
                                      "ok": not leftovers.strip()})
+        elif scenario == "tui-sip":
+            # From the top: `]` jumps to the Spotlight row, `k` back up lands on the last
+            # menu row, which is `disable SIP` / `enable SIP`.
+            for is_on in (False, True):
+                word = "on" if is_on else "off"
+                transcript = vm.tui([(6, "]"), (1, "k"), (1, "\r"), (2, "y"),
+                                     (4, "y\r"), (3, f"{GUEST_USER}\r"), (3, f"{GUEST_PASSWORD}\r"),
+                                     (15, "\r"), (3, "q")])
+                report[f"tui_sip_{word}_transcript"] = transcript
+                expected = ("turn SIP back on?" if is_on else "turn SIP off?",
+                            f"System Integrity Protection is {word}.",
+                            "Done — restart the Mac for it to take effect")
+                screen_text = re.sub(r"\x1b(\[[0-9;?]*[A-Za-z]|[()][0-9A-B]|[=>])", "", transcript)
+                missing = [e for e in expected if e not in screen_text]
+                vm.reboot()
+                sip_now = vm.sh("csrutil status").stdout.strip()
+                report["checks"].append({"step": f"TUI: SIP {word} row + reboot",
+                                         "sip_now": sip_now + (f" · missing on screen: {missing}" if missing else ""),
+                                         "ok": not missing and ("enabled" if is_on else "disabled") in sip_now})
+        elif scenario == "spotlight":
+            def spotlight_state(step: str) -> dict:
+                procs = vm.sh("for p in mds mds_stores mdworker_shared corespotlightd; do "
+                              "echo \"$p $(pgrep -x $p | wc -l | tr -d ' ')\"; done").stdout.split("\n")
+                state = {"step": step,
+                         "mdutil": vm.sh("mdutil -s / 2>&1; mdutil -s /System/Volumes/Data 2>&1",
+                                         check=False).stdout.strip(),
+                         "running": {p.split()[0]: int(p.split()[1]) for p in procs if p.strip()}}
+                report.setdefault("spotlight", []).append(state)
+                return state
+            before = spotlight_state("before")
+            # `]` jumps from the menu to the Spotlight row; space ticks it, enter applies.
+            report["tui_spotlight_off_transcript"] = vm.tui([(6, "]"), (1, " "), (1, "\r"), (10, "q")])
+            off = spotlight_state("after TUI toggle off")
+            report["checks"].append({"step": "TUI: Spotlight off", "sip_now": off["mdutil"].replace("\n", " | "),
+                                     "ok": "disabled" in off["mdutil"] and "disabled" not in before["mdutil"]})
+            vm.reboot()
+            booted = time.time()
+            for offset in watch:
+                time.sleep(max(0.0, booted + offset - time.time()))
+                snap = spotlight_state(f"reboot, {offset}s after boot")
+                report["checks"].append({"step": f"Spotlight still off, {offset}s after boot",
+                                         "sip_now": snap["mdutil"].replace("\n", " | ") + f" · running {snap['running']}",
+                                         "ok": "disabled" in snap["mdutil"]})
+            report["tui_spotlight_on_transcript"] = vm.tui([(6, "]"), (1, " "), (1, "\r"), (15, "q")])
+            on = spotlight_state("after TUI toggle on")
+            report["checks"].append({"step": "TUI: Spotlight back on", "sip_now": on["mdutil"].replace("\n", " | "),
+                                     "ok": "disabled" not in on["mdutil"]})
         elif scenario == "sip-flow":
             report["disable_sip_output"] = answer_csrutil(vm, f"python3 {GUEST_DEBLOAT} --disable-sip")
             vm.reboot()

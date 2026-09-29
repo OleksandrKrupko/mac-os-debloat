@@ -1459,21 +1459,17 @@ def run_tui(stdscr, sections: list[Section]) -> str | None:
                 if stdscr.getch() not in (ord("y"), ord("Y")):
                     status = "SIP unchanged"
                     continue
-                curses.def_prog_mode()
-                stdscr.move(h - 1, 0)
-                stdscr.clrtoeol()
+                # csrutil reads its y/n, user and password prompts as lines; under curses'
+                # cbreak/noecho mode Enter never completes them, so leave curses entirely.
+                curses.endwin()
+                is_on = action == "sip-on"
+                code = set_sip(is_on)
+                print("\n" + (recovery_steps(is_on) if code else
+                              "Done — restart the Mac for it to take effect, then run debloat again."))
+                input("press enter to go back to debloat ")
                 stdscr.refresh()
-                curses.curs_set(1)
-                code = set_sip(is_on=action == "sip-on")
-                curses.curs_set(0)
-                curses.reset_prog_mode()
-                stdscr.redrawwin()
-                stdscr.refresh()
-                if code:
-                    problem_reports.append("\n" + recovery_steps(is_on=action == "sip-on"))
-                    status = "csrutil refused from macOS — Recovery steps are printed when you quit (q)"
-                else:
-                    status = "done — restart the Mac for it to take effect, then run debloat again"
+                status = ("csrutil refused from macOS — see the Recovery steps above" if code else
+                          "SIP change takes effect after a restart")
                 continue
             if action == "disable-all":
                 h, w = stdscr.getmaxyx()
