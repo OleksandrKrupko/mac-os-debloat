@@ -1268,15 +1268,9 @@ def build_display_rows(sections: list[Section]) -> tuple[list[tuple[str, object]
 
 
 SPINNER = "▖▘▝▗"
+COMMENT_COL = len("  [✓]  ") + 48 + 2
 SPINNER_MS = 140
 SPOTLIGHT_POLL_S = 3
-
-
-def fit(text: str, width: int) -> str:
-    """Cut at a word boundary and end with `…`, rather than mid-word at the edge."""
-    if len(text) <= width:
-        return text
-    return text[:width - 1].rsplit(" ", 1)[0].rstrip(" —·,;") + "…"
 
 
 def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list[int],
@@ -1303,58 +1297,7 @@ def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list
            f"{where}")
     stdscr.addnstr(1, 0, sub[:w - 1], w - 1, curses.A_DIM)
 
-    rows, item_to_row = build_display_rows(sections)
-    content_top = 3
-    content_bottom = h - 3
-    visible_h = max(1, content_bottom - content_top)
-
-    cursor_row = item_to_row.get(cursor, 0)
-    so = scroll[0]
-    if cursor_row < so:
-        so = cursor_row
-    elif cursor_row >= so + visible_h:
-        so = cursor_row - visible_h + 1
-    so = max(0, min(so, max(0, len(rows) - visible_h)))
-    scroll[0] = so
-
     flat = flat_index(sections)
-    item_by_id = {id(it): i for i, it in enumerate(flat)}
-
-    for screen_row, i in enumerate(range(so, min(so + visible_h, len(rows)))):
-        kind, payload = rows[i]
-        y = content_top + screen_row
-        if kind == "section":
-            line = f"── {payload} ".ljust(w - 1, "─")[:w - 1]
-            stdscr.addnstr(y, 0, line, w - 1, curses.A_DIM)
-        elif kind == "item":
-            it = payload  # type: ignore[assignment]
-            if it.action:
-                text = f"   ▸   {it.label:<48}  {it.comment}"
-            elif it.state == "indexing" and it.selected != it.disabled:
-                # A ticked change outranks the spinner: the user must still see
-                # the `*` and the box they asked for while the rebuild runs.
-                text = f"  [{SPINNER[tick % len(SPINNER)]}]  {it.label:<48}  {it.comment}"
-            else:
-                mark = "[✓]" if it.selected else "[ ]"
-                changed = " *" if it.selected == it.disabled else "  "
-                note = "needs SIP off · " if it.is_locked else ""
-                text = f"{changed}{mark}  {it.label:<48}  {note}{it.comment}"
-            is_cursor = item_by_id.get(id(it)) == cursor
-            attr = curses.A_REVERSE if is_cursor else curses.A_DIM if it.is_locked else curses.A_NORMAL
-            stdscr.addnstr(y, 0, fit(text, w - 1), w - 1, attr)
-        # blank: leave row empty
-
-    if so > 0:
-        try:
-            stdscr.addnstr(content_top, max(0, w - 2), "↑", 1, curses.A_DIM)
-        except curses.error:
-            pass
-    if so + visible_h < len(rows):
-        try:
-            stdscr.addnstr(content_bottom - 1, max(0, w - 2), "↓", 1, curses.A_DIM)
-        except curses.error:
-            pass
-
     current = flat[cursor]
     about = current.comment
     if current.action == "sip-off":
@@ -1363,12 +1306,76 @@ def draw(stdscr, sections: list[Section], cursor: int, status: str, scroll: list
     if current.is_locked:
         about = ("with SIP on, macOS restarts this within seconds of a disable — "
                  "'disable SIP' at the top unlocks it. " + about)
-    explanation = textwrap.wrap(f"{current.label}: {about}", w - 1)
-    if len(explanation) > 2:
-        explanation = [explanation[0], fit(explanation[1] + " " + explanation[2], w - 1)]
+    explanation = textwrap.wrap(f"{current.label}: {about}", w - 1,
+                                break_on_hyphens=False)[:max(2, h // 4)]
+
+    # A long comment wraps onto extra lines under its own column.
+    room = max(20, w - 1 - COMMENT_COL)
+    lines: list[tuple[str, str, Item | None]] = []
+    first_line: dict[int, int] = {}
+    for kind, payload in build_display_rows(sections)[0]:
+        if kind != "item":
+            lines.append((kind, payload or "", None))
+            continue
+        it = payload  # type: ignore[assignment]
+        if it.action:
+            head = f"   ▸   {it.label:<48}  "
+            comment = it.comment
+        elif it.state == "indexing" and it.selected != it.disabled:
+            # A ticked change outranks the spinner: the user must still see
+            # the `*` and the box they asked for while the rebuild runs.
+            head = f"  [{SPINNER[tick % len(SPINNER)]}]  {it.label:<48}  "
+            comment = it.comment
+        else:
+            mark = "[✓]" if it.selected else "[ ]"
+            changed = " *" if it.selected == it.disabled else "  "
+            head = f"{changed}{mark}  {it.label:<48}  "
+            comment = ("needs SIP off · " if it.is_locked else "") + it.comment
+        chunks = textwrap.wrap(comment, room, break_on_hyphens=False) or [""]
+        first_line[id(it)] = len(lines)
+        lines.append(("item", head + chunks[0], it))
+        lines.extend(("item", " " * COMMENT_COL + chunk, it) for chunk in chunks[1:])
+
+    content_top = 3
+    content_bottom = h - 2 - len(explanation)
+    visible_h = max(1, content_bottom - content_top)
+
+    top = first_line.get(id(current), 0)
+    bottom = top + sum(1 for _, _, it in lines if it is current) - 1
+    so = scroll[0]
+    if top < so:
+        so = top
+    elif bottom >= so + visible_h:
+        so = min(top, bottom - visible_h + 1)
+    so = max(0, min(so, max(0, len(lines) - visible_h)))
+    scroll[0] = so
+
+    for screen_row, i in enumerate(range(so, min(so + visible_h, len(lines)))):
+        kind, text, it = lines[i]
+        y = content_top + screen_row
+        if kind == "section":
+            line = f"── {text} ".ljust(w - 1, "─")[:w - 1]
+            stdscr.addnstr(y, 0, line, w - 1, curses.A_DIM)
+        elif kind == "item":
+            attr = (curses.A_REVERSE if it is current else
+                    curses.A_DIM if it.is_locked else curses.A_NORMAL)
+            stdscr.addnstr(y, 0, text[:w - 1], w - 1, attr)
+        # blank: leave row empty
+
+    if so > 0:
+        try:
+            stdscr.addnstr(content_top, max(0, w - 2), "↑", 1, curses.A_DIM)
+        except curses.error:
+            pass
+    if so + visible_h < len(lines):
+        try:
+            stdscr.addnstr(content_bottom - 1, max(0, w - 2), "↓", 1, curses.A_DIM)
+        except curses.error:
+            pass
+
     try:
         for n, line in enumerate(explanation):
-            stdscr.addnstr(h - 3 + n, 0, line, w - 1, curses.A_DIM)
+            stdscr.addnstr(content_bottom + n, 0, line, w - 1, curses.A_DIM)
         if status:
             stdscr.addnstr(h - 1, 0, status[:w - 1], w - 1, curses.A_BOLD)
     except curses.error:
