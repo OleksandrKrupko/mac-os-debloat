@@ -693,6 +693,14 @@ class CatalogStatsTest(unittest.TestCase):
                       (tmp / "package.json").read_text())
         self.assertEqual(self.debloat.sync_docs(tmp, check=True), [])
 
+    def test_charge_limiting_daemons_are_in_no_preset(self):
+        """Disabling these was reported to break charge limiting, so a preset
+        that promises to cost nothing must not take them."""
+        for sec in self.debloat.parse_labels(self.debloat.EMBEDDED_LABELS):
+            for it in sec.items:
+                if it.label in ("com.apple.perfpowermetricd", "com.apple.powerlogHelperd"):
+                    self.assertEqual(sec.preset, "", it.label)
+
     def test_campo_is_app_launcher_not_an_ai_preset(self):
         """campo hosts Cmd-Space on 27. Keep it listed so you can still turn
         it off, but it is how you launch apps — not Siri — and balanced

@@ -400,7 +400,6 @@ com.apple.diagnosticextensions.osx.spotlight.helper  # Spotlight diagnostic exte
 com.apple.audioanalyticsd [sip-off]           # audio analytics
 com.apple.inputanalyticsd [sip-off]           # input analytics (typing/touch)
 com.apple.ecosystemanalyticsd                 # ecosystem analytics
-com.apple.perfpowermetricd                    # perf/power metrics
 com.apple.analyticsagent [sip-off]            # analytics agent
 com.apple.CrashReporterSupportHelper [sip-off] # crash reporter support
 com.apple.DiagnosticsReporter                 # diagnostics reporter
@@ -415,7 +414,6 @@ com.apple.usbctelemetryd                      # USB-C port telemetry
 com.apple.systemstats.analysis [sip-off]      # system stats analysis
 com.apple.systemstats.daily                   # daily system stats
 com.apple.systemstats.microstackshot_periodic # periodic microstackshots
-com.apple.powerlogHelperd                     # battery usage logging (Settings battery graph)
 com.apple.signpost.signpost_reporter          # signpost perf telemetry
 com.apple.enhancedloggingd                    # MDM enhanced logging
 
@@ -457,6 +455,10 @@ com.apple.wifianalyticsd [sip-off]            # WiFi telemetry
 com.apple.bridgeOSUpdateProxy                 # firmware/update proxy (T2 and Apple Silicon)
 com.apple.bosreporter                         # bridgeOS install reporting
 com.apple.boswatcher                          # BoardOS accessory watcher
+
+# === Battery / power logging (charge limiting needs these) ===
+com.apple.perfpowermetricd                    # perf/power metrics; off was reported to break charge limiting (macOS limiter, AlDente)
+com.apple.powerlogHelperd                     # battery usage logging (Settings battery graph); off was reported to break charge limiting
 
 # === Print (no printer) ===
 com.apple.printtool.agent                     # print tool agent

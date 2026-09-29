@@ -53,8 +53,8 @@ Below them is a checkbox per service: `space` toggles, `enter` applies. The bott
 
 ```bash
 debloat                    # interactive TUI
-debloat --preset telemetry # analytics, crash reports, ads, beta enrollment (47)
-debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (184)
+debloat --preset telemetry # analytics, crash reports, ads, beta enrollment (45)
+debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (182)
 debloat --disable-all      # every label
 debloat --enable-all       # everything back on, boot daemon removed
 debloat --restore          # back to the state before your last apply
@@ -74,11 +74,11 @@ A preset disables its own labels, leaves everything else as it is, and never re-
 
 | | disables | with SIP on | what you lose |
 |---|---|---|---|
-| `--preset telemetry` | 47 | 27 | nothing — analytics, crash reports, Apple ads, Biome, beta enrollment |
-| `--preset balanced` | 184 | 102 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather |
+| `--preset telemetry` | 45 | 25 | nothing — analytics, crash reports, Apple ads, Biome, beta enrollment |
+| `--preset balanced` | 182 | 100 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather |
 | `--disable-all` | 296 | 172 | balanced, plus Safari, Photos, Mail/Calendar/Contacts, Music/TV/Books, Maps, Time Machine, Screen Time, HomeKit, printing, iCloud sync — and **iCloud login, App Store purchases, macOS Update installs, and on macOS 27 Cmd-Space / the four-finger Apps pinch break** |
 
-Neither preset touches Apple ID auth, App Store commerce, FairPlay or bridgeOS — 27 labels only `--disable-all` or your own preset reach. 112 labels sit between `balanced` and `--disable-all`; pick those yourself:
+Neither preset touches Apple ID auth, App Store commerce, FairPlay or bridgeOS — 27 labels only `--disable-all` or your own preset reach. 114 labels sit between `balanced` and `--disable-all`; pick those yourself:
 
 ```bash
 mkdir -p ~/.mac-os-debloat/presets
@@ -122,11 +122,11 @@ For an app grid without the index, drag `/Applications` onto the Dock and view i
 <details>
 <summary><b>What it disables</b></summary>
 
-296 labels across 71 sections, including:
+296 labels across 72 sections, including:
 - Siri / voice assistant (14)
 - Apple Intelligence — Tahoe (13), incl. `contextstored` (known >30 GB memory leak) and `privatecloudcomputed`
 - More AI / Apple Intelligence (13)
-- Diagnostics extras (31) — all telemetry to Apple
+- Diagnostics extras (29) — all telemetry to Apple
 - Apple Music Player (AMP) suite (5), Apple Music / iTunes / Media streaming (7)
 - Safari + Safari extras (7)
 - Game Center + game controllers (7)
@@ -151,6 +151,8 @@ Every label, with what it does and what breaks, is in the script (`EMBEDDED_LABE
 **`AKAnisetteError Code=-8025` on iCloud sign-in** — re-enable `com.apple.Siri.agent`; `balanced` disables it ([#7](https://github.com/OleksandrKrupko/mac-os-debloat/issues/7)).
 
 **Cmd-Space and the four-finger pinch do nothing (macOS 27)** — re-enable `com.apple.campo`.
+
+**Charge limit ignored (macOS charge limiter, AlDente)** — re-enable `com.apple.perfpowermetricd` and `com.apple.powerlogHelperd`. Neither preset disables them; only `--disable-all` does ([#21](https://github.com/OleksandrKrupko/mac-os-debloat/issues/21)).
 
 **`Boot-out failed: 150`** — macOS won't stop that running process now; the disable still applies from its next launch. The apply lists any label whose disable did not take effect.
 
