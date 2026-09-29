@@ -85,7 +85,7 @@ com.apple.intelligenceplatformd [sip-off]     # Apple Intelligence platform
 com.apple.knowledge-agent [sip-off]           # knowledge graph extraction
 
 # === Apple Intelligence (Tahoe) [balanced] ===
-com.apple.mlruntimed                          # ML runtime
+com.apple.mlruntimed                          # runtime for Apple's distributed (federated) ML model evaluation
 com.apple.generativeexperiencesd [sip-off]    # Writing Tools / generative AI
 com.apple.privatecloudcomputed [sip-off]      # Private Cloud Compute (AI cloud offload)
 com.apple.modelcatalogd [sip-off]             # AI model catalog daemon
@@ -93,8 +93,8 @@ com.apple.ModelCatalogAgent [sip-off]         # AI model catalog agent
 com.apple.modelmanagerd [sip-off]             # AI model manager / downloads
 com.apple.naturallanguaged                    # NaturalLanguage framework daemon
 com.apple.textunderstandingd                  # text understanding AI
-com.apple.triald [sip-off]                    # Siri experiments (known CPU hog)
-com.apple.triald.system [sip-off]             # Siri experiments (system)
+com.apple.triald [sip-off]                    # Trial: Apple's A/B experiments and feature / asset rollouts (all apps, not only Siri)
+com.apple.triald.system [sip-off]             # Trial, system side: experiments and asset rollouts for system daemons
 com.apple.visualintelligenced                 # Visual Intelligence (screenshot / camera AI)
 com.apple.GenerativeFunctions.agentstored     # Apple Intelligence agent session store
 com.apple.contextstored [sip-off]             # context store (KNOWN >30GB MEMORY LEAK in Tahoe)
@@ -122,6 +122,7 @@ com.apple.suggestd [sip-off]                  # Spotlight smart suggestions back
 com.apple.biomesyncd [sip-off]                # biome event sync
 com.apple.navd                                # time-to-leave / commute predictions
 com.apple.ospredictiond [sip-off]             # OS behavior predictions
+com.apple.milod [sip-off]                     # MicroLocation: learns places and rooms of interest for location-based suggestions
 
 # === Game Center / AirPlay receiver ===
 com.apple.gamed                               # Game Center
@@ -182,7 +183,7 @@ com.apple.amsengagementd [sip-off]            # Apple Media Services engagement
 
 # === Misc dead weight [balanced] ===
 com.apple.studentd                            # Schoolwork app
-com.apple.linkd [sip-off]                     # Universal Links (iOS-style deep links)
+com.apple.linkd [sip-off]                     # App Intents runtime: app actions for Shortcuts, Siri and Spotlight — Shortcuts' app actions stop
 com.apple.liveactivitiesd [sip-off]           # Live Activities widgets
 
 # === iCloud (no iCloud use) ===
@@ -212,7 +213,7 @@ com.apple.CommCenter [sip-off]                # iPhone cellular call relay (no i
 com.apple.contacts.postersyncd                # Contacts profile picture sync
 
 # === More AI/ML stragglers [balanced] ===
-com.apple.mlhostd [sip-off]                   # ML host daemon
+com.apple.mlhostd [sip-off]                   # on-device ML training host (Lighthouse)
 
 # === Cosmetic / app daemons [balanced] ===
 com.apple.powerchime                          # laptop charging chime sound
@@ -245,8 +246,8 @@ com.apple.LinkedNotesUIService                # Notes backlink indicator UI (~26
 # overlay: on 27 Cmd-Space / the four-finger Apps pinch is com.apple.campo
 # (Siri AI.app). Do not list com.apple.Spotlight here — that is the old
 # overlay host, already feature-flagged off when campo is the UI.
-com.apple.metadata.mds                        # Spotlight server (KeepAlive)
-com.apple.metadata.mds.index                  # Spotlight index helper
+com.apple.metadata.mds                        # Spotlight server (KeepAlive); off, new files are not indexed
+com.apple.metadata.mds.index                  # Spotlight index helper; off, new files are not indexed
 com.apple.metadata.mds.scan                   # Spotlight scan helper
 com.apple.msrpc.mdssvc                        # Spotlight SMB/network metadata
 com.apple.corespotlightd                      # CoreSpotlight daemon
@@ -273,6 +274,7 @@ com.apple.financed [sip-off]                  # Wallet / Apple Card finance data
 com.apple.adid [sip-off]                      # Apple Device Identity (CoreADI) — iCloud auth, not ads
 com.apple.identityservicesd [sip-off]         # Apple ID identity (iMessage/FaceTime)
 com.apple.AppSSOAgent                         # Apple SSO extensions
+com.apple.cdpd [sip-off]                      # iCloud account recovery and keychain escrow (recovery contacts, iCloud Keychain)
 
 # === App Store full kill (re-enable when needed) ===
 com.apple.appstored                           # App Store daemon
@@ -320,12 +322,15 @@ com.apple.chronod [sip-off]                   # widget host (widgets gone, deman
 com.apple.AddressBook.AssistantService        # Contacts assistant
 com.apple.AddressBook.SourceSync              # Contacts source sync
 com.apple.AddressBook.abd                     # Contacts daemon
+com.apple.peopled                             # People: contact-based person actions (FaceTime, Calendar people)
+
+# === Audio route suggestions ===
+com.apple.intelligentroutingd                 # suggests audio / AirPlay output routes (one-tap route picker) — not Maps
 
 # === Maps (Google Maps user) ===
 com.apple.Maps.mapssyncd [sip-off]            # Apple Maps sync
 com.apple.Maps.mapspushd                      # Apple Maps push
 com.apple.maps.destinationd                   # Apple Maps destinations
-com.apple.intelligentroutingd                 # intelligent routing (Maps)
 
 # === Beta program enrollment (not on macOS beta) [telemetry] ===
 com.apple.appleseed.fbahelperd                # AppleSeed feedback assistant helper
@@ -454,7 +459,7 @@ com.apple.wifianalyticsd [sip-off]            # WiFi telemetry
 # macOS Update install step on both. Not in balanced.
 com.apple.bridgeOSUpdateProxy                 # firmware/update proxy (T2 and Apple Silicon)
 com.apple.bosreporter                         # bridgeOS install reporting
-com.apple.boswatcher                          # BoardOS accessory watcher
+com.apple.boswatcher                          # bridgeOS install watcher (macOS Update installs)
 
 # === Battery / power logging (charge limiting needs these) ===
 com.apple.perfpowermetricd                    # perf/power metrics; off was reported to break charge limiting (macOS limiter, AlDente)
@@ -487,15 +492,11 @@ com.apple.controlstrip                        # Touch Bar control strip
 com.apple.SpacesTouchBarAgent.app             # Touch Bar Spaces agent
 com.apple.accessibility.dfrhud                # Touch Bar accessibility HUD
 
-# === Continuity Data Protocol (no iPhone) [balanced] ===
-com.apple.cdpd [sip-off]                      # Continuity Data Protocol
 
 # === Safari Web Inspector / WebKit push (no Safari) ===
 com.apple.webinspectord                       # Safari Web Inspector
 com.apple.webkit.webpushd                     # WebKit push (Safari web notifications)
 
-# === Photos People / face recognition ===
-com.apple.peopled                             # People framework (face detection in Photos)
 
 # === iCloud Drive / Keychain Circle / SyncedDefaults / CloudDocs ===
 com.apple.bird [sip-off]                      # iCloud Drive sync daemon
@@ -506,11 +507,9 @@ com.apple.syncdefaultsd [sip-off]             # iCloud synced defaults (app pref
 com.apple.managedappdistributionagent [sip-off] # managed app distribution agent
 com.apple.managedappdistributiond [sip-off]   # managed app distribution daemon
 
-# === Migration / setup leftover [balanced] ===
-com.apple.milod [sip-off]                     # Migration assistant daemon
 
-# === extra Time Machine replicator label ===
-com.apple.replicatord [sip-off]               # Time Machine replicator (alt label)
+# === Paired-device sync (Replicator) ===
+com.apple.replicatord [sip-off]               # syncs data with your paired devices (used by the widget host) — not Time Machine
 """
 
 USER_LABELS_FILE = BACKUP_DIR / "labels.txt"
@@ -686,7 +685,6 @@ DOC_COUNT_SECTIONS: dict[str, tuple[str, ...]] = {
         "Sidecar / iPad second display (no iPad)",
         "Continuity Capture (no iPhone webcam)",
         "AirPlay sender UI",
-        "Continuity Data Protocol (no iPhone)",
     ),
     "preset_untouched": (
         "Apple ID / Apple Pay / SSO",

@@ -54,7 +54,7 @@ Below them is a checkbox per service: `space` toggles, `enter` applies. The bott
 ```bash
 debloat                    # interactive TUI
 debloat --preset telemetry # analytics, crash reports, ads, beta enrollment (45)
-debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (182)
+debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (181)
 debloat --disable-all      # every label
 debloat --enable-all       # everything back on, boot daemon removed
 debloat --restore          # back to the state before your last apply
@@ -75,10 +75,10 @@ A preset disables its own labels, leaves everything else as it is, and never re-
 | | disables | with SIP on | what you lose |
 |---|---|---|---|
 | `--preset telemetry` | 45 | 25 | nothing — analytics, crash reports, Apple ads, Biome, beta enrollment |
-| `--preset balanced` | 182 | 100 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather |
+| `--preset balanced` | 181 | 100 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather |
 | `--disable-all` | 296 | 172 | balanced, plus Safari, Photos, Mail/Calendar/Contacts, Music/TV/Books, Maps, Time Machine, Screen Time, HomeKit, printing, iCloud sync — and **iCloud login, App Store purchases, macOS Update installs, and on macOS 27 Cmd-Space / the four-finger Apps pinch break** |
 
-Neither preset touches Apple ID auth, App Store commerce, FairPlay or bridgeOS — 27 labels only `--disable-all` or your own preset reach. 114 labels sit between `balanced` and `--disable-all`; pick those yourself:
+Neither preset touches Apple ID auth, App Store commerce, FairPlay or bridgeOS — 28 labels only `--disable-all` or your own preset reach. 115 labels sit between `balanced` and `--disable-all`; pick those yourself:
 
 ```bash
 mkdir -p ~/.mac-os-debloat/presets
@@ -122,7 +122,7 @@ For an app grid without the index, drag `/Applications` onto the Dock and view i
 <details>
 <summary><b>What it disables</b></summary>
 
-296 labels across 72 sections, including:
+296 labels across 70 sections, including:
 - Siri / voice assistant (14)
 - Apple Intelligence — Tahoe (13), incl. `contextstored` (known >30 GB memory leak) and `privatecloudcomputed`
 - More AI / Apple Intelligence (13)
@@ -133,8 +133,8 @@ For an app grid without the index, drag `/Applications` onto the Dock and view i
 - Family / Parental controls (8)
 - Beta program enrollment (6)
 - iMessage / FaceTime / phone relay (9)
-- Apple Mail / Calendar / Contacts / Reminders + AddressBook (8)
-- Continuity / AirDrop / Sidecar / AirPlay / Continuity Capture (8)
+- Apple Mail / Calendar / Contacts / Reminders + AddressBook (9)
+- Continuity / AirDrop / Sidecar / AirPlay / Continuity Capture (7)
 - Maps, Books, TV+, Stocks/News/Weather, App Store, Apple ID, iCloud, print, Touch Bar, bridgeOS, Xcode / iOS dev stack
 
 Every label, with what it does and what breaks, is in the script (`EMBEDDED_LABELS`). Labels missing on your macOS build are skipped (`--audit` lists them).
