@@ -28,21 +28,6 @@ brew install OleksandrKrupko/debloat/debloat && debloat
 
 ![mac-os-debloat TUI — preset menu on top, then the Spotlight row and 296 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
 
-## SIP on or off
-
-System Integrity Protection decides how much macOS lets you keep off.
-
-| | SIP on (default) | SIP off |
-|---|---|---|
-| Labels you can disable | 172 | all 296 |
-| After a reboot | the boot daemon disables them again | they stay off on their own |
-| Measured on macOS 26.5 (VM), after reboots | all 149 SIP-on labels stayed off — 55% of the 273 loaded | all 273 stayed off — 100% |
-| Cost | none | iPhone/iPad apps stop running on the Mac; root processes can modify system files and load unsigned kernel extensions |
-
-With SIP on, the other 124 labels — marked `[sip-off]`, greyed out in the TUI — are restarted by macOS within seconds of a kill, so the tool leaves them alone.
-
-**Turning SIP off:** pick `disable SIP` in the menu (or `debloat --disable-sip`). It runs `csrutil disable`, which asks for an admin user and password, then you restart. If macOS only allows it from Recovery, the tool prints the exact steps. `enable SIP` / `--enable-sip` turns it back on.
-
 ## Use
 
 The TUI's top rows are actions — arrow onto one and press `enter`:
@@ -90,34 +75,37 @@ debloat --preset mine
 
 `~/.mac-os-debloat/labels.txt` adds your own labels to the catalog, in the same format.
 
-<details>
-<a name="persistence"></a>
-<summary><b>How it keeps services off</b></summary>
+## SIP on or off
 
-`launchctl disable` writes an override per launchd domain (`system` for LaunchDaemons, `gui/$UID` for LaunchAgents); the tool resolves each label's real domains and writes only there.
+System Integrity Protection decides how much macOS lets you keep off.
 
-With SIP on, launchd drops those overrides at every boot and logs why, once per label: `Ignoring enabled state due to rootless restrictions` ("rootless" is SIP). Without help, 2 of 273 survive a reboot — the two on Apple's `RemovableServices` allowlist. So while anything is disabled and SIP is on, the tool keeps a boot daemon installed (`/Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist`, running a root-owned copy of the script). It disables the saved set again at boot and at login, then checks every minute for 5 minutes and every 5 minutes after that. Anything running gets killed once; a service that comes back after its kill is left alone. A service that starts for the first time can run until the next check. Every apply updates the saved set, so re-enabling something is never undone at boot. `--enable-all`, or any apply with SIP off, removes the daemon and its files.
+| | SIP on (default) | SIP off |
+|---|---|---|
+| Labels you can disable | 172 | all 296 |
+| After a reboot | the boot daemon disables them again | they stay off on their own |
+| Measured on macOS 26.5 (VM), after reboots | all 149 SIP-on labels stayed off — 55% of the 273 loaded | all 273 stayed off — 100% |
+| Cost | none | iPhone/iPad apps stop running on the Mac; root processes can modify system files and load unsigned kernel extensions |
 
-Some services macOS starts on demand whenever another process asks for them (`because ipc (mach)` / `xpc event` in launchd's log), and with SIP on it refuses to unload them. Killed, 60 of 70 were back within 2 seconds. Those 124 are the `[sip-off]` labels. With SIP off, launchd honours every override and nothing restarts.
+With SIP on, the other 124 labels — marked `[sip-off]`, greyed out in the TUI — are restarted by macOS within seconds of a kill, so the tool leaves them alone.
 
-Also:
-- macOS updates wipe the overrides — run the tool again after one.
-- `gui/$UID` disables are per user; run once per account.
-- `debloat --status` shows what's in effect right now, including services **disabled but running anyway**.
+**Turning SIP off:** pick `disable SIP` in the menu (or `debloat --disable-sip`). It runs `csrutil disable`, which asks for an admin user and password, then you restart. If macOS only allows it from Recovery, the tool prints the exact steps. `enable SIP` / `--enable-sip` turns it back on.
 
-Reported in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8) and [#20](https://github.com/OleksandrKrupko/mac-os-debloat/issues/20); the SIP behaviour has been reported since macOS 10.12.4 ([openradar 32281471](https://openradar.appspot.com/32281471)).
-
-</details>
+## Reference
 
 <details>
-<a name="spotlight"></a>
-<summary><b>Spotlight</b></summary>
+<summary><b>Troubleshooting</b></summary>
 
-The Spotlight checkbox is the file *index* (`mds`, `mds_stores`, `mdworker`), not the overlay you type into. It serves Cmd-Space file search, Finder search and launchers like Alfred and Raycast. **Off** runs `mdutil -a -d`: indexing stops on every volume; `find`, `grep`, `ripgrep`, git and editor search keep working. **On** runs `mdutil -a -i on` plus `mdutil -a -E`, a 10-30 minute rebuild; the row shows a spinner until it settles. Off survives reboots on its own, with no daemon: the indexers (`mds_stores`, `mdworker_shared`) stay stopped, while `mds` and `corespotlightd` stay resident.
+**iCloud / App Store requests time out, like a firewall block** — the local daemon that should answer (`identityservicesd`, `appstoreagent`, `akd`) is off. Only `--disable-all` or your own preset turn those off. Check `debloat --status`.
 
-On macOS 27, Cmd-Space and the four-finger Apps pinch are `com.apple.campo`, a separate row. It is not Siri and not in `balanced`; turning it off breaks app launching even with the index on. KeepAlive `mds` / `corespotlightd` are a separate section gated to macOS 27 — on Tahoe 26, disabling `corespotlightd` broke typed Cmd-Space.
+**macOS Update downloads but never installs** — `bridgeOSUpdateProxy` / `bosreporter` / `boswatcher` are needed on Apple Silicon too. Only `--disable-all` turns them off ([#7](https://github.com/OleksandrKrupko/mac-os-debloat/issues/7)).
 
-For an app grid without the index, drag `/Applications` onto the Dock and view it as a grid ([#15](https://github.com/OleksandrKrupko/mac-os-debloat/issues/15#issuecomment-5752920540)).
+**`AKAnisetteError Code=-8025` on iCloud sign-in** — re-enable `com.apple.Siri.agent`; `balanced` disables it ([#7](https://github.com/OleksandrKrupko/mac-os-debloat/issues/7)).
+
+**Cmd-Space and the four-finger pinch do nothing (macOS 27)** — re-enable `com.apple.campo`.
+
+**Charge limit ignored (macOS charge limiter, AlDente)** — re-enable `com.apple.perfpowermetricd` and `com.apple.powerlogHelperd`. Neither preset disables them; only `--disable-all` does ([#21](https://github.com/OleksandrKrupko/mac-os-debloat/issues/21)).
+
+**`Boot-out failed: 150`** — macOS won't stop that running process now; the disable still applies from its next launch. The apply lists any label whose disable did not take effect.
 
 </details>
 
@@ -144,23 +132,6 @@ Every label, with what it does and what breaks, is in the script (`EMBEDDED_LABE
 </details>
 
 <details>
-<summary><b>Troubleshooting</b></summary>
-
-**iCloud / App Store requests time out, like a firewall block** — the local daemon that should answer (`identityservicesd`, `appstoreagent`, `akd`) is off. Only `--disable-all` or your own preset turn those off. Check `debloat --status`.
-
-**macOS Update downloads but never installs** — `bridgeOSUpdateProxy` / `bosreporter` / `boswatcher` are needed on Apple Silicon too. Only `--disable-all` turns them off ([#7](https://github.com/OleksandrKrupko/mac-os-debloat/issues/7)).
-
-**`AKAnisetteError Code=-8025` on iCloud sign-in** — re-enable `com.apple.Siri.agent`; `balanced` disables it ([#7](https://github.com/OleksandrKrupko/mac-os-debloat/issues/7)).
-
-**Cmd-Space and the four-finger pinch do nothing (macOS 27)** — re-enable `com.apple.campo`.
-
-**Charge limit ignored (macOS charge limiter, AlDente)** — re-enable `com.apple.perfpowermetricd` and `com.apple.powerlogHelperd`. Neither preset disables them; only `--disable-all` does ([#21](https://github.com/OleksandrKrupko/mac-os-debloat/issues/21)).
-
-**`Boot-out failed: 150`** — macOS won't stop that running process now; the disable still applies from its next launch. The apply lists any label whose disable did not take effect.
-
-</details>
-
-<details>
 <summary><b>Never disable these</b></summary>
 
 Not in the catalog; listed because `labels.txt` could add them:
@@ -172,29 +143,45 @@ Not in the catalog; listed because `labels.txt` could add them:
 
 </details>
 
-<details>
-<a name="why"></a>
-<summary><b>Why, and the RAM figure</b></summary>
+<a name="spotlight"></a>
 
-macOS Tahoe baselines at ~4-5 GB of RAM and a steady CPU drip from Apple daemons most people don't use. The ~1.5-2 GB figure is the drop in used memory on an idle M4 MacBook Pro 16 GB (macOS 26.3.1) after disabling the full default set and rebooting. Yours depends on what you use. `--status`'s `reclaimable RAM` is free + inactive + speculative + purgeable pages right now, not a prediction.
+<details>
+<summary><b>Spotlight</b></summary>
+
+The Spotlight checkbox is the file *index* (`mds`, `mds_stores`, `mdworker`), not the overlay you type into. It serves Cmd-Space file search, Finder search and launchers like Alfred and Raycast. **Off** runs `mdutil -a -d`: indexing stops on every volume; `find`, `grep`, `ripgrep`, git and editor search keep working. **On** runs `mdutil -a -i on` plus `mdutil -a -E`, a 10-30 minute rebuild; the row shows a spinner until it settles. Off survives reboots on its own, with no daemon: the indexers (`mds_stores`, `mdworker_shared`) stay stopped, while `mds` and `corespotlightd` stay resident.
+
+On macOS 27, Cmd-Space and the four-finger Apps pinch are `com.apple.campo`, a separate row. It is not Siri and not in `balanced`; turning it off breaks app launching even with the index on. KeepAlive `mds` / `corespotlightd` are a separate section gated to macOS 27 — on Tahoe 26, disabling `corespotlightd` broke typed Cmd-Space.
+
+For an app grid without the index, drag `/Applications` onto the Dock and view it as a grid ([#15](https://github.com/OleksandrKrupko/mac-os-debloat/issues/15#issuecomment-5752920540)).
 
 </details>
 
+<a name="persistence"></a>
+
 <details>
-<a name="testing"></a>
-<summary><b>How it's tested</b></summary>
+<summary><b>How it keeps services off</b></summary>
 
-Unit tests run against a fake `launchctl`: `python3 tests/test_debloat.py`.
+`launchctl disable` writes an override per launchd domain (`system` for LaunchDaemons, `gui/$UID` for LaunchAgents); the tool resolves each label's real domains and writes only there.
 
-[`tests/e2e.py`](tests/e2e.py) runs the real thing in throwaway [tart](https://tart.run) VMs — real macOS, SIP on or off, real reboots and cold boots — and judges each label from launchd's own state, writing the evidence as JSON and a per-label table.
+With SIP on, launchd drops those overrides at every boot and logs why, once per label: `Ignoring enabled state due to rootless restrictions` ("rootless" is SIP). Without help, 2 of 273 survive a reboot — the two on Apple's `RemovableServices` allowlist. So while anything is disabled and SIP is on, the tool keeps a boot daemon installed (`/Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist`, running a root-owned copy of the script). It disables the saved set again at boot and at login, then checks every minute for 5 minutes and every 5 minutes after that. Anything running gets killed once; a service that comes back after its kill is left alone. A service that starts for the first time can run until the next check. Every apply updates the saved set, so re-enabling something is never undone at boot. `--enable-all`, or any apply with SIP off, removes the daemon and its files.
 
-```sh
-python3 tests/e2e.py prepare --os 26.5 [--sip off]
-python3 tests/e2e.py run persist --os 26.5 --preset disable-all --watch 60,300,600
-python3 tests/e2e.py run sip-flow --os 26.5 --preset disable-all
-```
+Some services macOS starts on demand whenever another process asks for them (`because ipc (mach)` / `xpc event` in launchd's log), and with SIP on it refuses to unload them. Killed, 60 of 70 were back within 2 seconds. Those 124 are the `[sip-off]` labels. With SIP off, launchd honours every override and nothing restarts.
 
-Scenarios: `apply`, `restore`, `reboot`, `poweroff`, `persist` (boot daemon), `sip-flow` (SIP off and back on through debloat), `tui-sip` (the TUI's SIP rows, typed on a real terminal), `spotlight` (the TUI's Spotlight row through a reboot). Needs an Apple Silicon Mac; the VM has no battery or Bluetooth, so labels that only load on real hardware are reported as not loaded.
+Also:
+- macOS updates wipe the overrides — run the tool again after one.
+- `gui/$UID` disables are per user; run once per account.
+- `debloat --status` shows what's in effect right now, including services **disabled but running anyway**.
+
+Reported in [#8](https://github.com/OleksandrKrupko/mac-os-debloat/issues/8) and [#20](https://github.com/OleksandrKrupko/mac-os-debloat/issues/20); the SIP behaviour has been reported since macOS 10.12.4 ([openradar 32281471](https://openradar.appspot.com/32281471)).
+
+</details>
+
+<a name="why"></a>
+
+<details>
+<summary><b>Why, and the RAM figure</b></summary>
+
+macOS Tahoe baselines at ~4-5 GB of RAM and a steady CPU drip from Apple daemons most people don't use. The ~1.5-2 GB figure is the drop in used memory on an idle M4 MacBook Pro 16 GB (macOS 26.3.1) after disabling the full default set and rebooting. Yours depends on what you use. `--status`'s `reclaimable RAM` is free + inactive + speculative + purgeable pages right now, not a prediction.
 
 </details>
 
@@ -208,6 +195,25 @@ Scenarios: `apply`, `restore`, `reboot`, `poweroff`, `persist` (boot daemon), `s
 | [b0gdanw Tahoe gist](https://gist.github.com/b0gdanw/0c20c2fd5d0a7e6cff01849b57108967) | shell script | ✓ | needs SIP off | copy the gist |
 | [launchtui](https://github.com/macournoyer/launchtui) | TUI | ✗ generic | `bootout` only, not kept off | `cargo install` |
 | [Silverback-Debloater](https://github.com/Wamphyre/macOS_Silverback-Debloater) | script | ✓ | — | Intel desktops, macOS 12 / 15 |
+
+</details>
+
+<a name="testing"></a>
+
+<details>
+<summary><b>How it's tested</b></summary>
+
+Unit tests run against a fake `launchctl`: `python3 tests/test_debloat.py`.
+
+[`tests/e2e.py`](tests/e2e.py) runs the real thing in throwaway [tart](https://tart.run) VMs — real macOS, SIP on or off, real reboots and cold boots — and judges each label from launchd's own state, writing the evidence as JSON and a per-label table.
+
+```sh
+python3 tests/e2e.py prepare --os 26.5 [--sip off]
+python3 tests/e2e.py run persist --os 26.5 --preset disable-all --watch 60,300,600
+python3 tests/e2e.py run sip-flow --os 26.5 --preset disable-all
+```
+
+Scenarios: `apply`, `restore`, `reboot`, `poweroff`, `persist` (boot daemon), `sip-flow` (SIP off and back on through debloat), `tui-sip` (the TUI's SIP rows, typed on a real terminal), `spotlight` (the TUI's Spotlight row through a reboot). Needs an Apple Silicon Mac; the VM has no battery or Bluetooth, so labels that only load on real hardware are reported as not loaded.
 
 </details>
 

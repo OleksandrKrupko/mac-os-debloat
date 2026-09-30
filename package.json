@@ -1,6 +1,6 @@
 {
   "name": "@oleksandr_krupko/mac-os-debloat",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "description": "Debloat your Mac from the terminal: disable 296 non-essential macOS launchd services (Siri, Apple Intelligence, telemetry, ads, unused Apple apps) plus Spotlight, and keep them off across reboots. Works with SIP on; turn SIP off from the menu to disable every label. One-key presets, fully reversible, zero deps. macOS Tahoe 26 and Golden Gate 27, Apple Silicon.",
   "bin": {
     "mac-os-debloat": "bin/cli.js",
