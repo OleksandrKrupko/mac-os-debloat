@@ -2,11 +2,11 @@
 
 **Turn off the Apple background services you don't use — from the terminal, in one keystroke, fully reversible.**
 
-Interactive console util to disable 296 non-essential macOS launchd services — Siri, Apple Intelligence, telemetry, ads, and the Apple apps you don't use — plus the Spotlight file index. macOS Tahoe 26 and Golden Gate 27, Apple Silicon. Needs nothing but `python3`.
+Interactive console util to disable 307 non-essential macOS launchd services — Siri, Apple Intelligence, telemetry, ads, and the Apple apps you don't use — plus the Spotlight file index. macOS Tahoe 26 and Golden Gate 27, Apple Silicon. Needs nothing but `python3`.
 
 - **~1.5-2 GB of RAM back** on a 16 GB M4 ([how that was measured](#why)).
 - **Keeps them off across reboots.** With SIP on, macOS re-enables disabled services at every boot; a small boot daemon, installed on your first apply, disables them again. With SIP off they stay off on their own.
-- **Two modes — you choose.** With SIP on, 172 labels can be kept off. Turn SIP off from the menu and all 296 can.
+- **Two modes — you choose.** With SIP on, 180 labels can be kept off. Turn SIP off from the menu and all 307 can.
 - **The desktop is never touched.** WindowServer, Finder, Dock, audio, networking and security aren't in the catalog at any setting.
 - **One key undoes everything.** `enable all` / `--enable-all`, or `--restore` to go back to exactly how it was before your last apply.
 
@@ -26,7 +26,7 @@ brew install OleksandrKrupko/debloat/debloat && debloat
 
 `python3` ships with the Xcode Command Line Tools (`xcode-select --install` if it's missing).
 
-![mac-os-debloat TUI — preset menu on top, then the Spotlight row and 296 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
+![mac-os-debloat TUI — preset menu on top, then the Spotlight row and 307 launchd services grouped by section, space to toggle, enter to apply](https://raw.githubusercontent.com/OleksandrKrupko/mac-os-debloat/main/screenshot.png)
 
 ## Use
 
@@ -38,8 +38,8 @@ Below them is a checkbox per service: `space` toggles, `enter` applies. The bott
 
 ```bash
 debloat                    # interactive TUI
-debloat --preset telemetry # analytics, crash reports, ads, beta enrollment (45)
-debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (181)
+debloat --preset telemetry # analytics, crash reports, ads, beta enrollment (48)
+debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (188)
 debloat --disable-all      # every label
 debloat --enable-all       # everything back on, boot daemon removed
 debloat --restore          # back to the state before your last apply
@@ -59,13 +59,13 @@ A preset disables its own labels, leaves everything else as it is, and never re-
 
 | | disables | with SIP on | what you lose |
 |---|---|---|---|
-| `--preset telemetry` | 45 | 25 | nothing — analytics, crash reports, Apple ads, Biome, beta enrollment |
-| `--preset balanced` | 181 | 100 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather |
-| `--disable-all` | 296 | 172 | balanced, plus Safari, Photos, Mail/Calendar/Contacts, Music/TV/Books, Maps, Time Machine, Screen Time, HomeKit, printing, iCloud sync — and **iCloud login, App Store purchases, macOS Update installs, and on macOS 27 Cmd-Space / the four-finger Apps pinch break** |
+| `--preset telemetry` | 48 | 27 | nothing — analytics, crash reports, Apple ads, Biome, beta enrollment |
+| `--preset balanced` | 188 | 104 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather |
+| `--disable-all` | 307 | 180 | balanced, plus Safari, Photos, Mail/Calendar/Contacts, Music/TV/Books, Maps, Time Machine, Screen Time, HomeKit, printing, iCloud sync — and **iCloud login, App Store purchases, macOS Update installs, and on macOS 27 Cmd-Space / the four-finger Apps pinch break** |
 
 Counts are for the full catalog; the TUI shows only the labels present on your macOS build, so its numbers are a little lower.
 
-Neither preset touches Apple ID auth, App Store commerce, FairPlay or bridgeOS — 28 labels only `--disable-all` or your own preset reach. 115 labels sit between `balanced` and `--disable-all`; pick those yourself:
+Neither preset touches Apple ID auth, App Store commerce, FairPlay or bridgeOS — 28 labels only `--disable-all` or your own preset reach. 119 labels sit between `balanced` and `--disable-all`; pick those yourself:
 
 ```bash
 mkdir -p ~/.mac-os-debloat/presets
@@ -81,12 +81,12 @@ System Integrity Protection decides how much macOS lets you keep off.
 
 | | SIP on (default) | SIP off |
 |---|---|---|
-| Labels you can disable | 172 | all 296 |
+| Labels you can disable | 180 | all 307 |
 | After a reboot | the boot daemon disables them again | they stay off on their own |
 | Measured on macOS 26.5 (VM), after reboots | all 149 SIP-on labels stayed off — 55% of the 273 loaded | all 273 stayed off — 100% |
 | Cost | none | iPhone/iPad apps stop running on the Mac; root processes can modify system files and load unsigned kernel extensions |
 
-With SIP on, the other 124 labels — marked `[sip-off]`, greyed out in the TUI — are restarted by macOS within seconds of a kill, so the tool leaves them alone.
+With SIP on, the other 127 labels — marked `[sip-off]`, greyed out in the TUI — are restarted by macOS within seconds of a kill, so the tool leaves them alone.
 
 **Turning SIP off:** pick `disable SIP` in the menu (or `debloat --disable-sip`). It runs `csrutil disable`, which asks for an admin user and password, then you restart. If macOS only allows it from Recovery, the tool prints the exact steps. `enable SIP` / `--enable-sip` turns it back on.
 
@@ -112,13 +112,13 @@ With SIP on, the other 124 labels — marked `[sip-off]`, greyed out in the TUI 
 <details>
 <summary><b>What it disables</b></summary>
 
-296 labels across 70 sections, including:
+307 labels across 70 sections, including:
 - Siri / voice assistant (14)
 - Apple Intelligence — Tahoe (13), incl. `contextstored` (known >30 GB memory leak) and `privatecloudcomputed`
-- More AI / Apple Intelligence (13)
+- More AI / Apple Intelligence (16)
 - Diagnostics extras (29) — all telemetry to Apple
-- Apple Music Player (AMP) suite (5), Apple Music / iTunes / Media streaming (7)
-- Safari + Safari extras (7)
+- Apple Music Player (AMP) suite (5), Apple Music / iTunes / Media streaming (8)
+- Safari + Safari extras (8)
 - Game Center + game controllers (7)
 - Family / Parental controls (8)
 - Beta program enrollment (6)
@@ -165,7 +165,7 @@ For an app grid without the index, drag `/Applications` onto the Dock and view i
 
 With SIP on, launchd drops those overrides at every boot and logs why, once per label: `Ignoring enabled state due to rootless restrictions` ("rootless" is SIP). Without help, 2 of 273 survive a reboot — the two on Apple's `RemovableServices` allowlist. So while anything is disabled and SIP is on, the tool keeps a boot daemon installed (`/Library/LaunchDaemons/io.github.oleksandrkrupko.debloat.plist`, running a root-owned copy of the script). It disables the saved set again at boot and at login, then checks every minute for 5 minutes and every 5 minutes after that. Anything running gets killed once; a service that comes back after its kill is left alone. A service that starts for the first time can run until the next check. Every apply updates the saved set, so re-enabling something is never undone at boot. `--enable-all`, or any apply with SIP off, removes the daemon and its files.
 
-Some services macOS starts on demand whenever another process asks for them (`because ipc (mach)` / `xpc event` in launchd's log), and with SIP on it refuses to unload them. Killed, 60 of 70 were back within 2 seconds. Those 124 are the `[sip-off]` labels. With SIP off, launchd honours every override and nothing restarts.
+Some services macOS starts on demand whenever another process asks for them (`because ipc (mach)` / `xpc event` in launchd's log), and with SIP on it refuses to unload them. Killed, 60 of 70 were back within 2 seconds. Those 127 are the `[sip-off]` labels. With SIP off, launchd honours every override and nothing restarts.
 
 Also:
 - macOS updates wipe the overrides — run the tool again after one.
@@ -190,7 +190,7 @@ macOS Tahoe baselines at ~4-5 GB of RAM and a steady CPU drip from Apple daemons
 
 | Tool | Interface | Curated list | SIP | Install |
 |---|---|---|---|---|
-| **mac-os-debloat** | TUI + CLI | ✓ 296 labels + Spotlight | works with SIP on (172 labels); SIP off optional (all) | none — Python stdlib |
+| **mac-os-debloat** | TUI + CLI | ✓ 307 labels + Spotlight | works with SIP on (180 labels); SIP off optional (all) | none — Python stdlib |
 | [privacy.sexy](https://github.com/undergroundwires/privacy.sexy) | web / desktop script generator | privacy settings, a few services | its service-disable scripts say they need SIP off | download |
 | [b0gdanw Tahoe gist](https://gist.github.com/b0gdanw/0c20c2fd5d0a7e6cff01849b57108967) | shell script | ✓ | needs SIP off | copy the gist |
 | [launchtui](https://github.com/macournoyer/launchtui) | TUI | ✗ generic | `bootout` only, not kept off | `cargo install` |
