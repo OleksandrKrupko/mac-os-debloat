@@ -102,6 +102,9 @@ com.apple.contextstored [sip-off]             # context store (KNOWN >30GB MEMOR
 # === Telemetry / analytics [telemetry] ===
 com.apple.analyticsd [sip-off]                # Apple diagnostics submission
 com.apple.tipsd [sip-off]                     # Tips app notifications
+com.apple.cloudtelemetryd [sip-off]           # macOS 27: CloudTelemetry framework daemon
+com.apple.libsqlite3.dbtelemetryd             # macOS 27: SQLite database telemetry (background task only)
+com.apple.sharereportingd                     # macOS 27: ShareReporting framework daemon
 
 # === AirDrop / Continuity (no iPhone) [balanced] ===
 com.apple.sharingd [sip-off]                  # AirDrop / Handoff / share sheet (~60 MB resident)
@@ -185,6 +188,7 @@ com.apple.amsengagementd [sip-off]            # Apple Media Services engagement
 com.apple.studentd                            # Schoolwork app
 com.apple.linkd [sip-off]                     # App Intents runtime: app actions for Shortcuts, Siri and Spotlight — Shortcuts' app actions stop
 com.apple.liveactivitiesd [sip-off]           # Live Activities widgets
+com.apple.remotespatialpreviewd               # macOS 27: remote spatial preview service (SpatialPreviewServices)
 
 # === iCloud (no iCloud use) ===
 com.apple.cloudd [sip-off]                    # iCloud sync core
@@ -239,6 +243,9 @@ com.apple.intelligenceflowd [sip-off]         # AI flow daemon
 com.apple.intelligencetasksd                  # AI tasks daemon
 com.apple.synapse.contentlinkingd             # Notes / Safari content links (backlinks)
 com.apple.LinkedNotesUIService                # Notes backlink indicator UI (~26 MB)
+com.apple.hybridsearchd [sip-off]             # macOS 27: generative search indexing and queries (HybridSearch, ~56 MB)
+com.apple.imageplaygroundd [sip-off]          # macOS 27: Image Playground on-demand image service
+com.apple.textcontextd                        # macOS 27: personal context and personalization service (Archetype)
 
 # === Spotlight KeepAlive daemons (mdutil -d leaves these resident) [macos>=27] ===
 # Not in telemetry/balanced. On Tahoe 26, launchctl on corespotlightd broke
@@ -265,6 +272,7 @@ com.apple.mediastream.mstreamd                # iCloud media stream
 com.apple.mediacontinuityd                    # media Continuity (no iPhone)
 com.apple.mediaremoted [sip-off]              # media keys / now-playing
 com.apple.mediaremoteagent [sip-off]          # media remote agent
+com.apple.shazameventsd                       # macOS 27: Shazam events daemon (ShazamEvents)
 
 # === Apple ID / Apple Pay / SSO ===
 com.apple.appleaccountd [sip-off]             # Apple ID account daemon
@@ -326,6 +334,7 @@ com.apple.peopled                             # People: contact-based person act
 
 # === Audio route suggestions ===
 com.apple.intelligentroutingd                 # suggests audio / AirPlay output routes (one-tap route picker) — not Maps
+com.apple.sensingpredictd                     # macOS 27: audio accessory discovery predictions (SensingPredict)
 
 # === Maps (Google Maps user) ===
 com.apple.Maps.mapssyncd [sip-off]            # Apple Maps sync
@@ -364,6 +373,7 @@ com.apple.Safari.History                      # Safari history
 com.apple.Safari.PasswordBreachAgent          # password leak checker (needs iCloud Keychain)
 com.apple.SafariHistoryServiceAgent           # Safari history XPC
 com.apple.SafariNotificationAgent             # Safari web notifications
+com.apple.guidedbrowsingd                     # macOS 27: Safari guided browsing service (SafariCore)
 
 # === Family / Parental controls (no family setup) [balanced] ===
 com.apple.familycontrols                      # family controls daemon
@@ -484,6 +494,7 @@ com.apple.AMPSystemPlayerAgent                # system music player agent
 
 # === Apple TV+ / video subscriptions ===
 com.apple.videosubscriptionsd                 # Apple TV+ subscriptions
+com.apple.tvremoted                           # macOS 27: Apple TV remote control (TVRemoteCore, MediaRemote)
 
 # === Touch Bar (M4 has none) [balanced] ===
 com.apple.nowplayingtouchui                   # Touch Bar now-playing UI
@@ -1922,7 +1933,7 @@ def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
     return run_apply(sections, dry_run)
 
 
-VERSION = "0.13.2"
+VERSION = "0.14.0"
 
 
 def help_text() -> str:
