@@ -68,6 +68,12 @@ EMBEDDED_LABELS = """\
 # still reaches it if you have another launcher.
 com.apple.campo                               # Cmd-Space + four-finger Apps pinch (Spotlight UI). Leave on to launch apps the usual way.
 
+# === Apple Intelligence services campo subscribes to (macOS 27) ===
+# Not in balanced: stopping either while Siri AI (campo) runs makes it retry
+# the lookup in a tight loop at 100%+ CPU until Siri AI restarts.
+com.apple.generativeexperiencesd [sip-off]    # Writing Tools / generative AI; owns ExternalProviderService
+com.apple.GenerativeFunctions.agentstored     # Apple Intelligence agent session store (agentSessionStore)
+
 # === Siri / voice assistant [balanced] ===
 com.apple.siriappintentsd                     # Siri App Intents orchestrator
 com.apple.assistant_service                   # Siri execution / flow XPC
@@ -86,7 +92,6 @@ com.apple.knowledge-agent [sip-off]           # knowledge graph extraction
 
 # === Apple Intelligence (Tahoe) [balanced] ===
 com.apple.mlruntimed                          # runtime for Apple's distributed (federated) ML model evaluation
-com.apple.generativeexperiencesd [sip-off]    # Writing Tools / generative AI
 com.apple.privatecloudcomputed [sip-off]      # Private Cloud Compute (AI cloud offload)
 com.apple.modelcatalogd [sip-off]             # AI model catalog daemon
 com.apple.ModelCatalogAgent [sip-off]         # AI model catalog agent
@@ -96,7 +101,6 @@ com.apple.textunderstandingd                  # text understanding AI
 com.apple.triald [sip-off]                    # Trial: Apple's A/B experiments and feature / asset rollouts (all apps, not only Siri)
 com.apple.triald.system [sip-off]             # Trial, system side: experiments and asset rollouts for system daemons
 com.apple.visualintelligenced                 # Visual Intelligence (screenshot / camera AI)
-com.apple.GenerativeFunctions.agentstored     # Apple Intelligence agent session store
 com.apple.contextstored [sip-off]             # context store (KNOWN >30GB MEMORY LEAK in Tahoe)
 
 # === Telemetry / analytics [telemetry] ===
@@ -1933,7 +1937,7 @@ def cmd_preset(sections: list[Section], name: str, dry_run: bool) -> int:
     return run_apply(sections, dry_run)
 
 
-VERSION = "0.14.0"
+VERSION = "0.14.1"
 
 
 def help_text() -> str:
