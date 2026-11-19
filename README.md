@@ -39,7 +39,7 @@ Below them is a checkbox per service: `space` toggles, `enter` applies. The bott
 ```bash
 debloat                    # interactive TUI
 debloat --preset telemetry # analytics, crash reports, ads, beta enrollment (48)
-debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (188)
+debloat --preset balanced  # telemetry + Siri, Apple Intelligence, iMessage, Family (186)
 debloat --disable-all      # every label
 debloat --enable-all       # everything back on, boot daemon removed
 debloat --restore          # back to the state before your last apply
@@ -60,12 +60,12 @@ A preset disables its own labels, leaves everything else as it is, and never re-
 | | disables | with SIP on | what you lose |
 |---|---|---|---|
 | `--preset telemetry` | 48 | 27 | nothing — analytics, crash reports, Apple ads, Biome, beta enrollment |
-| `--preset balanced` | 188 | 104 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather |
+| `--preset balanced` | 186 | 103 | Siri, Apple Intelligence, iMessage/FaceTime/Continuity, Family, News/Stocks/Weather |
 | `--disable-all` | 307 | 180 | balanced, plus Safari, Photos, Mail/Calendar/Contacts, Music/TV/Books, Maps, Time Machine, Screen Time, HomeKit, printing, iCloud sync — and **iCloud login, App Store purchases, macOS Update installs, and on macOS 27 Cmd-Space / the four-finger Apps pinch break** |
 
 Counts are for the full catalog; the TUI shows only the labels present on your macOS build, so its numbers are a little lower.
 
-Neither preset touches Apple ID auth, App Store commerce, FairPlay or bridgeOS — 28 labels only `--disable-all` or your own preset reach. 119 labels sit between `balanced` and `--disable-all`; pick those yourself:
+Neither preset touches Apple ID auth, App Store commerce, FairPlay or bridgeOS — 28 labels only `--disable-all` or your own preset reach. 121 labels sit between `balanced` and `--disable-all`; pick those yourself:
 
 ```bash
 mkdir -p ~/.mac-os-debloat/presets
@@ -112,9 +112,9 @@ With SIP on, the other 127 labels — marked `[sip-off]`, greyed out in the TUI 
 <details>
 <summary><b>What it disables</b></summary>
 
-307 labels across 70 sections, including:
+307 labels across 71 sections, including:
 - Siri / voice assistant (14)
-- Apple Intelligence — Tahoe (13), incl. `contextstored` (known >30 GB memory leak) and `privatecloudcomputed`
+- Apple Intelligence — Tahoe (11), incl. `contextstored` (known >30 GB memory leak) and `privatecloudcomputed`
 - More AI / Apple Intelligence (16)
 - Diagnostics extras (29) — all telemetry to Apple
 - Apple Music Player (AMP) suite (5), Apple Music / iTunes / Media streaming (8)
